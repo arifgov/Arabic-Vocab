@@ -29,48 +29,41 @@ class FirebaseAuth {
         
         try {
             console.log('🔄 Loading Firebase Auth modules...');
-            const { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-            
-            // First, check if we're returning from a redirect
-            try {
-                const redirectResult = await getRedirectResult(this.auth);
-                if (redirectResult && redirectResult.user) {
-                    console.log('✅ Google sign-in successful (redirect)');
-                    return redirectResult.user;
-                }
-            } catch (redirectError) {
-                console.log('No redirect result:', redirectError);
-            }
+            const { signInWithRedirect, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
             
             console.log('🔄 Creating Google provider...');
             const provider = new GoogleAuthProvider();
             provider.addScope('profile');
             provider.addScope('email');
             
-            // Try popup first
-            try {
-                console.log('🔄 Attempting popup sign-in...');
-                const result = await signInWithPopup(this.auth, provider);
-                console.log('✅ Google sign-in successful (popup)');
-                return result.user;
-            } catch (popupError) {
-                // If popup is blocked, fall back to redirect
-                if (popupError.code === 'auth/popup-blocked' || 
-                    popupError.code === 'auth/popup-closed-by-user' ||
-                    popupError.code === 'auth/cancelled-popup-request') {
-                    console.log('⚠️ Popup blocked, falling back to redirect...');
-                    console.log('🔄 Redirecting to Google sign-in...');
-                    await signInWithRedirect(this.auth, provider);
-                    // Return null - the redirect will handle the rest
-                    return null;
-                }
-                throw popupError;
-            }
+            console.log('🔄 Redirecting to Google sign-in...');
+            await signInWithRedirect(this.auth, provider);
+            // Return null - the redirect will handle the rest
+            return null;
         } catch (error) {
             console.error('❌ Google sign-in error:', error);
             console.error('Error code:', error.code);
             console.error('Error message:', error.message);
             throw error;
+        }
+    }
+    
+    async checkRedirectResult() {
+        if (!this.auth) {
+            return null;
+        }
+        
+        try {
+            const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+            const redirectResult = await getRedirectResult(this.auth);
+            if (redirectResult && redirectResult.user) {
+                console.log('✅ Google sign-in successful (redirect)');
+                return redirectResult.user;
+            }
+            return null;
+        } catch (error) {
+            console.log('No redirect result or error:', error);
+            return null;
         }
     }
 

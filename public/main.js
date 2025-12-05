@@ -44,12 +44,11 @@ class VocabTrainer {
     async checkRedirectResult() {
         try {
             if (window.firebaseAuthManager && window.firebaseAuthManager.auth) {
-                const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-                const result = await getRedirectResult(window.firebaseAuthManager.auth);
-                if (result && result.user) {
+                const user = await window.firebaseAuthManager.checkRedirectResult();
+                if (user) {
                     console.log('✅ Sign-in completed via redirect');
-                    window.firebaseSyncManager.setUserId(result.user.uid);
-                    this.updateUserUI(result.user);
+                    window.firebaseSyncManager.setUserId(user.uid);
+                    this.updateUserUI(user);
                     await this.syncProgressFromServer();
                     this.hideLoginView();
                 }
@@ -1541,8 +1540,7 @@ class VocabTrainer {
         try {
             if (button) {
                 button.disabled = true;
-                const originalHTML = button.innerHTML;
-                button.innerHTML = '<span>Signing in...</span>';
+                button.innerHTML = '<span class="login-icon">🔵</span><span>Redirecting...</span>';
             }
             
             // Check if Firebase Auth Manager is ready
@@ -1551,25 +1549,10 @@ class VocabTrainer {
                 throw new Error('Firebase Auth Manager not initialized');
             }
             
-            console.log('🔄 Calling signInWithGoogle...');
-            const user = await window.firebaseAuthManager.signInWithGoogle();
-            
-            // If user is null, it means we're using redirect (will be handled by checkRedirectResult)
-            if (!user) {
-                console.log('🔄 Redirecting to Google sign-in...');
-                // Show a message to the user
-                if (button) {
-                    button.innerHTML = '<span>Redirecting to Google...</span>';
-                }
-                return; // Don't hide login view yet - redirect will handle it
-            }
-            
-            console.log('✅ Signed in with Google:', user.email);
-            
-            this.hideLoginView();
-            this.updateUserUI(user);
-            window.firebaseSyncManager.setUserId(user.uid);
-            await this.syncProgressFromServer();
+            console.log('🔄 Redirecting to Google sign-in...');
+            // This will redirect the page, so we won't reach the code below
+            await window.firebaseAuthManager.signInWithGoogle();
+            // If we get here, something went wrong (shouldn't happen with redirect)
         } catch (error) {
             console.error('❌ Google login error:', error);
             console.error('Error details:', {
@@ -1580,28 +1563,17 @@ class VocabTrainer {
             });
             
             let errorMessage = 'Failed to sign in with Google. ';
-            if (error.code === 'auth/popup-closed-by-user') {
-                errorMessage += 'The sign-in window was closed. Please try again.';
-            } else if (error.code === 'auth/popup-blocked') {
-                errorMessage += 'Popup was blocked by your browser. The page will redirect to Google sign-in instead.';
-                // Try redirect as fallback
-                try {
-                    const { signInWithRedirect, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-                    const provider = new GoogleAuthProvider();
-                    await signInWithRedirect(window.firebaseAuthManager.auth, provider);
-                    // Don't show alert if redirect succeeds
-                    return;
-                } catch (redirectError) {
-                    errorMessage += ' Redirect also failed. Please allow popups for this site.';
-                }
-            } else if (error.code === 'auth/operation-not-allowed') {
+            if (error.code === 'auth/operation-not-allowed') {
                 errorMessage += 'Google sign-in is not enabled. Please contact support.';
             } else if (error.message) {
                 errorMessage += error.message;
+            } else {
+                errorMessage += 'Please try again.';
             }
             
             alert(errorMessage);
-        } finally {
+            
+            // Re-enable button on error
             if (button) {
                 button.disabled = false;
                 button.innerHTML = '<span class="login-icon">🔵</span><span>Continue with Google</span>';
