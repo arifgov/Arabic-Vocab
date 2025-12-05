@@ -7,11 +7,37 @@ class FirebaseAuth {
         this.auth = null;
         this.user = null;
         this.onAuthStateChanged = null;
+        this.authReady = false;  // Track if initial auth state is determined
+        this._authReadyPromise = null;
+        this._authReadyResolve = null;
+    }
+
+    // Returns a promise that resolves when auth state is first determined
+    waitForAuthReady() {
+        if (this.authReady) {
+            return Promise.resolve(this.user);
+        }
+        if (!this._authReadyPromise) {
+            this._authReadyPromise = new Promise(resolve => {
+                this._authReadyResolve = resolve;
+            });
+        }
+        return this._authReadyPromise;
+    }
+
+    _setAuthReady(user) {
+        console.log('🎯 Setting auth ready with user:', user ? user.email : 'null');
+        this.authReady = true;
+        this.user = user;
+        if (this._authReadyResolve) {
+            this._authReadyResolve(user);
+        }
     }
 
     async init() {
         console.log('🔄 Firebase Auth init() started...');
-        console.log('📋 Version check: firebase-auth.js v2.0');
+        console.log('📋 Version check: firebase-auth.js v3.0 (with authReady tracking)');
+        
         // Wait for Firebase to be initialized
         let waitCount = 0;
         while (!window.firebaseAuth) {
@@ -25,12 +51,37 @@ class FirebaseAuth {
         this.auth = window.firebaseAuth;
         console.log('✅ Firebase Auth initialized, auth object:', this.auth);
         
-        // Listen for auth state changes FIRST
-        // This will fire immediately if user is already authenticated (including from redirect)
+        // Check for redirect result FIRST before setting up listener
+        // This ensures we know if this is a redirect login before onAuthStateChanged fires
+        let redirectUser = null;
+        try {
+            console.log('🔄 Checking for redirect result...');
+            const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+            console.log('✅ getRedirectResult imported, calling it...');
+            const redirectResult = await getRedirectResult(this.auth);
+            console.log('📋 Redirect result:', redirectResult);
+            if (redirectResult && redirectResult.user) {
+                console.log('✅ Redirect result found, user:', redirectResult.user.email);
+                redirectUser = redirectResult.user;
+            } else {
+                console.log('ℹ️ No redirect result found');
+            }
+        } catch (error) {
+            console.error('❌ Error checking redirect result:', error);
+            console.error('Error details:', error.message, error.stack);
+        }
+        
+        // Now set up auth state listener
         console.log('🔄 Setting up auth state listener...');
         this.auth.onAuthStateChanged((user) => {
             console.log('🔔 Firebase auth state changed:', user ? `user: ${user.email}, uid: ${user.uid}` : 'signed out');
             this.user = user;
+            
+            // Mark auth as ready on first callback (or if redirect user found)
+            if (!this.authReady) {
+                this._setAuthReady(user);
+            }
+            
             if (this.onAuthStateChanged) {
                 console.log('📞 Calling onAuthStateChanged callback...');
                 this.onAuthStateChanged(user);
@@ -40,49 +91,31 @@ class FirebaseAuth {
         });
         console.log('✅ Auth state listener set up');
         
-        // Check for redirect result AFTER setting up listener
-        // getRedirectResult can only be called once per redirect, so we do it here
-        try {
-            console.log('🔄 Checking for redirect result...');
-            const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-            console.log('✅ getRedirectResult imported, calling it...');
-            const redirectResult = await getRedirectResult(this.auth);
-            console.log('📋 Redirect result:', redirectResult);
-            if (redirectResult && redirectResult.user) {
-                console.log('✅ Redirect result found, user:', redirectResult.user.email);
-                this.user = redirectResult.user;
-                // Manually trigger the callback since auth state might have already fired
-                if (this.onAuthStateChanged) {
-                    console.log('📞 Manually triggering onAuthStateChanged with redirect user...');
-                    this.onAuthStateChanged(redirectResult.user);
-                }
-            } else {
-                console.log('ℹ️ No redirect result found (redirectResult:', redirectResult, ')');
-                // Even if no redirect result, check current user
+        // If we got a redirect user, make sure it's set and callback is triggered
+        if (redirectUser) {
+            console.log('🔄 Processing redirect user...');
+            this.user = redirectUser;
+            this._setAuthReady(redirectUser);
+            if (this.onAuthStateChanged) {
+                console.log('📞 Manually triggering onAuthStateChanged with redirect user...');
+                this.onAuthStateChanged(redirectUser);
+            }
+        } else {
+            // Wait a moment for auth state to be determined, then check currentUser
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            if (!this.authReady) {
                 const currentUser = this.auth.currentUser;
                 console.log('📋 Checking auth.currentUser:', currentUser ? `${currentUser.email} (${currentUser.uid})` : 'null');
-                if (currentUser) {
-                    this.user = currentUser;
-                    if (this.onAuthStateChanged) {
-                        console.log('📞 Triggering onAuthStateChanged with currentUser...');
-                        this.onAuthStateChanged(currentUser);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error checking redirect result:', error);
-            console.error('Error details:', error.message, error.stack);
-            // Fallback: check current user
-            const currentUser = this.auth.currentUser;
-            console.log('📋 Fallback: Checking auth.currentUser:', currentUser ? `${currentUser.email} (${currentUser.uid})` : 'null');
-            if (currentUser) {
-                this.user = currentUser;
-                if (this.onAuthStateChanged) {
-                    console.log('📞 Triggering onAuthStateChanged with fallback currentUser...');
+                this._setAuthReady(currentUser);
+                if (currentUser && this.onAuthStateChanged) {
+                    console.log('📞 Triggering onAuthStateChanged with currentUser...');
                     this.onAuthStateChanged(currentUser);
                 }
             }
         }
+        
+        console.log('✅ Firebase Auth init() completed, authReady:', this.authReady, 'user:', this.user?.email);
     }
 
     async signInWithGoogle() {

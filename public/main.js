@@ -31,17 +31,8 @@ class VocabTrainer {
         await this.initFirebase();
         console.log('✅ initFirebase() completed');
         
-        // Give Firebase a moment to process auth state after redirect
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Check for redirect result (after Google sign-in redirect)
-        // This must be done AFTER initFirebase so auth state listener is set up
-        console.log('🔄 Calling checkRedirectResult()...');
-        await this.checkRedirectResult();
-        console.log('✅ checkRedirectResult() completed');
-        
         // Check auth state and show login if needed
-        // This will be handled by onAuthStateChanged, but we check here for initial state
+        // This waits for auth to be fully ready before deciding what to show
         console.log('🔄 Calling checkAuthState()...');
         await this.checkAuthState();
         console.log('✅ checkAuthState() completed');
@@ -125,8 +116,16 @@ class VocabTrainer {
     
     async checkAuthState() {
         console.log('🔄 checkAuthState() called');
-        const user = window.firebaseAuthManager?.getCurrentUser();
-        console.log('📋 User from getCurrentUser():', user ? `${user.email} (${user.uid})` : 'null');
+        
+        // Wait for auth state to be fully determined (important after redirects)
+        let user = null;
+        if (window.firebaseAuthManager) {
+            console.log('🔄 Waiting for auth to be ready...');
+            user = await window.firebaseAuthManager.waitForAuthReady();
+            console.log('✅ Auth ready, user:', user ? `${user.email} (${user.uid})` : 'null');
+        } else {
+            console.log('⚠️ firebaseAuthManager not available');
+        }
         
         if (!user) {
             // Check if user previously skipped login
