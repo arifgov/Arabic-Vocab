@@ -8,6 +8,10 @@ class VocabTrainer {
         this.currentMode = 'english-arabic';
         this.currentQuestion = null;
         this.questionPool = [];
+        this.totalQuestions = 0; // Total questions in current session
+        this.currentQuestionMode = null;
+        this.reviewMistakesOnly = false;
+        this.isFinalTest = false;
         this.sessionStats = {
             attempted: 0,
             correct: 0,
@@ -22,27 +26,178 @@ class VocabTrainer {
     }
     
     async init() {
+        // Initialize Firebase
+        await this.initFirebase();
+        
+        // Check for redirect result (after Google sign-in redirect)
+        await this.checkRedirectResult();
+        
+        // Check auth state and show login if needed
+        await this.checkAuthState();
+        
         await this.loadData();
         this.setupEventListeners();
         this.showDashboard();
         this.updateGlobalStats();
     }
     
+    async checkRedirectResult() {
+        try {
+            if (window.firebaseAuthManager && window.firebaseAuthManager.auth) {
+                const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+                const result = await getRedirectResult(window.firebaseAuthManager.auth);
+                if (result && result.user) {
+                    console.log('✅ Sign-in completed via redirect');
+                    window.firebaseSyncManager.setUserId(result.user.uid);
+                    this.updateUserUI(result.user);
+                    await this.syncProgressFromServer();
+                    this.hideLoginView();
+                }
+            }
+        } catch (error) {
+            console.log('No redirect result or error:', error);
+        }
+    }
+    
+    async initFirebase() {
+        try {
+            // Initialize Firebase Auth
+            await window.firebaseAuthManager.init();
+            
+            // Initialize Firebase Sync
+            await window.firebaseSyncManager.init();
+            
+            // Set up auth state listener
+            window.firebaseAuthManager.onAuthStateChanged = (user) => {
+                this.handleAuthStateChange(user);
+            };
+            
+            console.log('✅ Firebase initialized');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            // Continue without Firebase if it fails
+        }
+    }
+    
+    async checkAuthState() {
+        const user = window.firebaseAuthManager?.getCurrentUser();
+        if (!user) {
+            // Check if user previously skipped login
+            const skippedLogin = localStorage.getItem('skipped_login');
+            if (!skippedLogin) {
+                this.showLoginView();
+            }
+        } else {
+            // User is authenticated, set up sync
+            window.firebaseSyncManager.setUserId(user.uid);
+            // Try to load progress from Firestore
+            await this.syncProgressFromServer();
+        }
+    }
+    
+    handleAuthStateChange(user) {
+        if (user) {
+            window.firebaseSyncManager.setUserId(user.uid);
+            this.updateUserUI(user);
+            // Sync progress in background (don't block UI)
+            this.syncProgressFromServer().catch(err => {
+                console.warn('Background sync failed:', err);
+            });
+        } else {
+            window.firebaseSyncManager.setUserId(null);
+            this.hideUserUI();
+        }
+    }
+    
+    showLoginView() {
+        document.getElementById('login-view').style.display = 'flex';
+        document.getElementById('app').style.display = 'none';
+    }
+    
+    hideLoginView() {
+        document.getElementById('login-view').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+    }
+    
+    updateUserUI(user) {
+        const userMenu = document.getElementById('user-menu');
+        const userName = document.getElementById('user-name');
+        const userAvatar = document.getElementById('user-avatar');
+        const dropdownUserName = document.getElementById('dropdown-user-name');
+        const dropdownUserEmail = document.getElementById('dropdown-user-email');
+        
+        if (userMenu) userMenu.style.display = 'flex';
+        if (userName) userName.textContent = user.displayName || 'User';
+        if (userAvatar) userAvatar.textContent = user.displayName?.[0]?.toUpperCase() || '👤';
+        if (dropdownUserName) dropdownUserName.textContent = user.displayName || 'User';
+        if (dropdownUserEmail) dropdownUserEmail.textContent = user.email || '';
+    }
+    
+    hideUserUI() {
+        const userMenu = document.getElementById('user-menu');
+        if (userMenu) userMenu.style.display = 'none';
+    }
+    
+    async syncProgressFromServer() {
+        try {
+            if (!window.firebaseSyncManager || !window.firebaseSyncManager.syncEnabled) {
+                console.log('📭 Sync not enabled, skipping server sync');
+                return;
+            }
+            
+            const serverProgress = await window.firebaseSyncManager.loadProgress();
+            if (serverProgress) {
+                // Merge server progress with local (server wins on conflicts)
+                console.log('📥 Merging server progress with local...');
+                this.progress = this.mergeProgress(this.progress, serverProgress);
+                this.saveProgress();
+            } else {
+                console.log('📭 No server progress found, using local storage');
+            }
+        } catch (error) {
+            console.warn('⚠️ Error syncing from server (continuing with local storage):', error);
+            // Don't throw - app should work with local storage only
+        }
+    }
+    
+    mergeProgress(local, server) {
+        // Merge strategy: server wins for conflicts
+        const merged = {
+            wordProgress: { ...local.wordProgress, ...server.wordProgress },
+            lessonStatus: {
+                1: { ...local.lessonStatus?.[1], ...server.lessonStatus?.[1] },
+                2: { ...local.lessonStatus?.[2], ...server.lessonStatus?.[2] }
+            },
+            lastBook: server.lastBook || local.lastBook,
+            lastLesson: server.lastLesson || local.lastLesson,
+            lastMode: server.lastMode || local.lastMode
+        };
+        return merged;
+    }
+    
     async loadData() {
         try {
+            console.log('📥 Loading vocabulary data...');
             const [book1Res, book2Res] = await Promise.all([
                 fetch('data/book1.json'),
                 fetch('data/book2.json')
             ]);
             
+            if (!book1Res.ok || !book2Res.ok) {
+                throw new Error(`Failed to fetch data: Book1=${book1Res.status}, Book2=${book2Res.status}`);
+            }
+            
             this.books[1] = await book1Res.json();
             this.books[2] = await book2Res.json();
+            
+            console.log(`✅ Loaded Book 1: ${this.books[1].length} lessons`);
+            console.log(`✅ Loaded Book 2: ${this.books[2].length} lessons`);
             
             // Initialize progress for all words
             this.initializeProgress();
         } catch (error) {
-            console.error('Error loading data:', error);
-            alert('Failed to load vocabulary data. Please check that book1.json and book2.json exist in the data folder.');
+            console.error('❌ Error loading data:', error);
+            alert('Failed to load vocabulary data. Please check that book1.json and book2.json exist in the data folder.\n\nError: ' + error.message);
         }
     }
     
@@ -57,7 +212,11 @@ class VocabTrainer {
                             correct_count: 0,
                             incorrect_count: 0,
                             consecutive_correct: 0,
-                            mastered: false
+                            mastered: false,
+                            english_arabic_correct: false,
+                            arabic_english_correct: false,
+                            session_english_arabic: false,
+                            session_arabic_english: false
                         };
                         initialized = true;
                     }
@@ -92,7 +251,8 @@ class VocabTrainer {
             lessonStatus: { 1: {}, 2: {} },
             lastBook: 1,
             lastLesson: 1,
-            lastMode: 'english-arabic'
+            lastMode: 'english-arabic',
+            sessionState: null // Store session state for resume
         };
     }
     
@@ -103,6 +263,14 @@ class VocabTrainer {
         try {
             localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
             console.log('💾 Progress saved to localStorage');
+            
+            // Also sync to Firestore if authenticated (non-blocking)
+            if (window.firebaseSyncManager?.syncEnabled) {
+                window.firebaseSyncManager.saveProgress(this.progress).catch(error => {
+                    // Silently fail - local storage is the source of truth
+                    console.warn('Background sync failed (local storage saved):', error.code || error.message);
+                });
+            }
         } catch (e) {
             console.error('❌ Error saving progress:', e);
             alert('Warning: Could not save progress. Check if localStorage is enabled.');
@@ -129,7 +297,13 @@ class VocabTrainer {
             correct_count: 0,
             incorrect_count: 0,
             consecutive_correct: 0,
-            mastered: false
+            mastered: false,
+            // Track both directions separately
+            english_arabic_correct: false,  // Correct in English→Arabic mode
+            arabic_english_correct: false,  // Correct in Arabic→English mode
+            // Session tracking for "in one go" mastery
+            session_english_arabic: false,
+            session_arabic_english: false
         };
     }
     
@@ -153,20 +327,16 @@ class VocabTrainer {
         // Update with new data
         this.progress.wordProgress[id] = { ...existing, ...data };
         
-        // Save to localStorage immediately
-        try {
-            localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-            console.log('✅ Saved progress for', id, ':', this.progress.wordProgress[id]);
-            console.log('📦 Total words in progress:', Object.keys(this.progress.wordProgress).length);
-        } catch (e) {
-            console.error('❌ Error saving progress:', e);
-            alert('Warning: Could not save progress. Check if localStorage is enabled.');
-        }
+        // Save to localStorage and Firebase
+        this.saveProgress();
+        console.log('✅ Saved progress for', id, ':', this.progress.wordProgress[id]);
+        console.log('📦 Total words in progress:', Object.keys(this.progress.wordProgress).length);
     }
     
     getLessonStatus(book, lesson) {
         return this.progress.lessonStatus[book]?.[lesson] || {
             mastered: false,
+            final_test_passed: false,
             date_completed: null
         };
     }
@@ -201,10 +371,18 @@ class VocabTrainer {
                         correct_count: 0,
                         incorrect_count: 0,
                         consecutive_correct: 0,
-                        mastered: false
+                        mastered: false,
+                        english_arabic_correct: false,
+                        arabic_english_correct: false,
+                        session_english_arabic: false,
+                        session_arabic_english: false
                     });
                 });
-                this.setLessonStatus(book, lesson, { mastered: false, date_completed: null });
+                this.setLessonStatus(book, lesson, { 
+                    mastered: false, 
+                    final_test_passed: false,
+                    date_completed: null 
+                });
                 this.showLessonView(book, lesson);
             }
         }
@@ -214,44 +392,97 @@ class VocabTrainer {
     isWordMastered(id) {
         // Always get fresh data
         const wp = this.getWordProgress(id);
-        const isMastered = wp.mastered || wp.consecutive_correct >= 3;
-        return isMastered;
+        // Word is mastered if both directions are correct (in one go)
+        return wp.mastered || (wp.english_arabic_correct && wp.arabic_english_correct);
     }
     
-    updateWordMastery(id) {
+    updateWordMastery(id, mode, isCorrect) {
         const wp = this.getWordProgress(id);
-        if (wp.consecutive_correct >= 3 && !wp.mastered) {
-            this.setWordProgress(id, { mastered: true });
+        
+        // Track session performance for this mode
+        if (mode === 'english-arabic') {
+            wp.session_english_arabic = isCorrect;
+            if (isCorrect) {
+                wp.english_arabic_correct = true;
+            } else {
+                // Only reset English-Arabic, not Arabic-English if it's already correct
+                wp.english_arabic_correct = false;
+                // Only reset mastered status if it was previously mastered
+                if (wp.mastered) {
+                    wp.mastered = false;
+                }
+            }
+        } else if (mode === 'arabic-english') {
+            wp.session_arabic_english = isCorrect;
+            if (isCorrect) {
+                wp.arabic_english_correct = true;
+            } else {
+                // Only reset Arabic-English, not English-Arabic if it's already correct
+                wp.arabic_english_correct = false;
+                // Only reset mastered status if it was previously mastered
+                if (wp.mastered) {
+                    wp.mastered = false;
+                }
+            }
         }
+        
+        // Check if mastered (both directions correct)
+        // A word is mastered when you've answered it correctly in BOTH directions
+        if (wp.english_arabic_correct && wp.arabic_english_correct && !wp.mastered) {
+            wp.mastered = true;
+            console.log(`✅ Word ${id} mastered! Both directions correct.`);
+        }
+        
+        this.setWordProgress(id, wp);
     }
     
-    isLessonMastered(book, lesson) {
+    // Check if lesson has passed final test
+    hasPassedFinalTest(book, lesson) {
+        const status = this.getLessonStatus(book, lesson);
+        return status.final_test_passed || false;
+    }
+    
+    // Check if lesson is ready for final test (all words mastered)
+    isReadyForFinalTest(book, lesson) {
         const lessonData = this.books[book].find(l => l.lesson === lesson);
         if (!lessonData) return false;
         
         return lessonData.items.every(item => this.isWordMastered(item.id));
     }
     
+    isLessonMastered(book, lesson) {
+        // Lesson is mastered only if final test is passed
+        return this.hasPassedFinalTest(book, lesson);
+    }
+    
     updateLessonMastery(book, lesson) {
-        if (this.isLessonMastered(book, lesson)) {
-            const status = this.getLessonStatus(book, lesson);
-            if (!status.mastered) {
-                this.setLessonStatus(book, lesson, {
-                    mastered: true,
-                    date_completed: new Date().toISOString().split('T')[0]
-                });
-            }
-        }
+        // This is now handled by final test completion
+    }
+    
+    passFinalTest(book, lesson) {
+        this.setLessonStatus(book, lesson, {
+            final_test_passed: true,
+            date_completed: new Date().toISOString().split('T')[0]
+        });
     }
     
     isLessonUnlocked(book, lesson) {
-        if (lesson === 1) return true;
+        // Lesson 1 is always unlocked
+        if (lesson === 1) {
+            console.log(`  ✅ Lesson 1 is always unlocked`);
+            return true;
+        }
         
-        // Check if previous lesson is mastered
+        // Check if previous lesson has passed final test
         const prevLesson = this.books[book].find(l => l.lesson === lesson - 1);
-        if (!prevLesson) return true;
+        if (!prevLesson) {
+            console.log(`  ⚠️ Previous lesson ${lesson - 1} not found, unlocking lesson ${lesson}`);
+            return true;
+        }
         
-        return this.isLessonMastered(book, lesson - 1);
+        const prevPassed = this.hasPassedFinalTest(book, lesson - 1);
+        console.log(`  ${prevPassed ? '✅' : '❌'} Lesson ${lesson} unlock status: previous lesson passed = ${prevPassed}`);
+        return prevPassed;
     }
     
     // UI Navigation
@@ -260,9 +491,25 @@ class VocabTrainer {
         document.getElementById(viewId).classList.add('active');
     }
     
-    showDashboard() {
-        // Reload progress to ensure we have latest data
+    async showDashboard() {
+        // Reload progress to ensure we have latest data (from both localStorage and Firebase)
         this.progress = this.loadProgress();
+        
+        // If authenticated, try to sync from Firebase
+        if (window.firebaseSyncManager?.syncEnabled) {
+            try {
+                const serverProgress = await window.firebaseSyncManager.loadProgress();
+                if (serverProgress) {
+                    // Merge server progress (server wins on conflicts)
+                    this.progress = this.mergeProgress(this.progress, serverProgress);
+                    // Save merged progress to localStorage
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                }
+            } catch (error) {
+                console.warn('Could not load from Firebase, using local:', error);
+            }
+        }
+        
         console.log('🏠 Dashboard: Reloaded progress,', Object.keys(this.progress.wordProgress || {}).length, 'words tracked');
         this.showView('dashboard-view');
         this.renderLessonsList();
@@ -270,6 +517,7 @@ class VocabTrainer {
     }
     
     showLessonView(book, lesson) {
+        console.log(`📖 Showing lesson view: Book ${book}, Lesson ${lesson}`);
         this.currentBook = book;
         this.currentLesson = lesson;
         
@@ -279,30 +527,195 @@ class VocabTrainer {
         this.showView('lesson-view');
         
         const lessonData = this.books[book].find(l => l.lesson === lesson);
-        if (!lessonData) return;
+        if (!lessonData) {
+            console.error(`❌ Lesson ${lesson} not found in Book ${book}`);
+            alert(`Lesson ${lesson} not found in Book ${book}`);
+            this.showDashboard();
+            return;
+        }
+        
+        console.log(`✅ Lesson data loaded: ${lessonData.lesson_label} with ${lessonData.items.length} words`);
         
         document.getElementById('lesson-title').textContent = 
             `Book ${book} – ${lessonData.lesson_label}`;
         
         this.updateLessonProgress(book, lesson);
         
-        // Set mode selector
-        const modeSelect = document.getElementById('mode-select');
-        modeSelect.value = this.progress.lastMode || 'english-arabic';
+        // Show/hide final test button
+        const finalTestBtn = document.getElementById('final-test-btn');
+        if (this.isReadyForFinalTest(book, lesson) && !this.hasPassedFinalTest(book, lesson)) {
+            finalTestBtn.style.display = 'block';
+        } else {
+            finalTestBtn.style.display = 'none';
+        }
     }
     
     showQuestionView() {
         this.showView('question-view');
+        
+        // Always reload progress before starting/resuming
+        this.progress = this.loadProgress();
+        
+        // Check if we have a saved session state to resume
+        const sessionKey = `session_${this.currentBook}_${this.currentLesson}_${this.currentMode}_${this.isFinalTest ? 'final' : 'normal'}`;
+        const savedSession = localStorage.getItem(sessionKey);
+        
+        console.log('🔍 Checking for saved session:', sessionKey, savedSession ? 'Found' : 'Not found');
+        
+        if (savedSession && !this.reviewMistakesOnly && !this.isFinalTest) {
+            try {
+                const session = JSON.parse(savedSession);
+                // Resume if there are remaining questions (even if mistakes were made, we can continue)
+                if (session.questionPoolIds && session.questionPoolIds.length > 0) {
+                    console.log('📂 Resuming previous session...');
+                    this.sessionStats = {
+                        attempted: session.attempted || 0,
+                        correct: session.correct || 0,
+                        incorrect: session.incorrect || 0,
+                        weakWords: []
+                    };
+                    
+                    // Reconstruct question pool from IDs
+                    const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
+                    if (lessonData) {
+                        this.questionPool = session.questionPoolIds
+                            .map(id => lessonData.items.find(item => item.id === id))
+                            .filter(item => item !== undefined); // Remove any not found
+                        
+                        // Reconstruct weak words from IDs
+                        if (session.weakWords && Array.isArray(session.weakWords)) {
+                            this.sessionStats.weakWords = session.weakWords
+                                .map(id => lessonData.items.find(item => item.id === id))
+                                .filter(item => item !== undefined);
+                        }
+                    }
+                    
+                    this.totalQuestions = session.totalQuestions || this.questionPool.length;
+                    console.log(`✅ Resumed: ${this.sessionStats.attempted} attempted, ${this.questionPool.length} questions remaining`);
+                    // Keep the session key - we'll update it as we progress
+                } else {
+                    // Start fresh if no questions remaining
+                    console.log('📭 No questions remaining in saved session, starting fresh');
+                    this.initializeNewSession();
+                }
+            } catch (e) {
+                console.error('Error loading session state:', e);
+                this.initializeNewSession();
+            }
+        } else {
+            // Start fresh session
+            this.initializeNewSession();
+        }
+        
+        // Show/hide final test banner
+        const finalTestBanner = document.getElementById('final-test-banner');
+        if (this.isFinalTest) {
+            finalTestBanner.style.display = 'flex';
+        } else {
+            finalTestBanner.style.display = 'none';
+        }
+        
+        this.nextQuestion();
+    }
+    
+    initializeNewSession() {
         this.sessionStats = {
             attempted: 0,
             correct: 0,
             incorrect: 0,
             weakWords: []
         };
-        this.nextQuestion();
+        
+        // Reset question pool to start fresh
+        this.questionPool = [];
+        
+        // Reset session tracking for all words in current lesson (only if not final test)
+        if (!this.isFinalTest) {
+            this.resetSessionTracking();
+        }
+        
+        // Initialize question pool and get total count
+        this.questionPool = this.buildQuestionPool(
+            this.currentBook,
+            this.currentLesson,
+            this.reviewMistakesOnly,
+            this.isFinalTest || false,
+            this.currentMode
+        );
+        this.totalQuestions = this.questionPool.length;
+    }
+    
+    saveSessionState() {
+        // Save session state if there are remaining questions (for resume functionality)
+        // Save even if mistakes were made - user can continue where they left off
+        if (!this.currentBook || !this.currentLesson) {
+            return; // Can't save if we don't have book/lesson info
+        }
+        
+        if (this.questionPool.length > 0 && !this.isFinalTest) {
+            const sessionKey = `session_${this.currentBook}_${this.currentLesson}_${this.currentMode}_${this.isFinalTest ? 'final' : 'normal'}`;
+            // Store question pool as IDs only (we'll reconstruct from lesson data)
+            const questionPoolIds = this.questionPool.map(q => q.id);
+            const sessionState = {
+                sessionStats: { ...this.sessionStats },
+                questionPoolIds: questionPoolIds, // Store IDs instead of full objects
+                totalQuestions: this.totalQuestions,
+                attempted: this.sessionStats.attempted,
+                correct: this.sessionStats.correct,
+                incorrect: this.sessionStats.incorrect,
+                weakWords: this.sessionStats.weakWords.map(w => w.id) // Store IDs only
+            };
+            localStorage.setItem(sessionKey, JSON.stringify(sessionState));
+            console.log('💾 Session state saved for resume:', questionPoolIds.length, 'questions remaining, attempted:', this.sessionStats.attempted);
+        } else if (this.questionPool.length === 0) {
+            // Clear session state if all questions are done
+            const sessionKey = `session_${this.currentBook}_${this.currentLesson}_${this.currentMode}_${this.isFinalTest ? 'final' : 'normal'}`;
+            localStorage.removeItem(sessionKey);
+            console.log('🗑️ Session completed, cleared saved state');
+        }
+    }
+    
+    resetSessionTracking() {
+        const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
+        if (lessonData) {
+            lessonData.items.forEach(item => {
+                const wp = this.getWordProgress(item.id);
+                // Reset session tracking but keep mastery status if already mastered
+                if (!wp.mastered) {
+                    // Only reset if not already mastered
+                    wp.session_english_arabic = false;
+                    wp.session_arabic_english = false;
+                    // Reset direction flags for new session (need both correct in one go)
+                    wp.english_arabic_correct = false;
+                    wp.arabic_english_correct = false;
+                    this.setWordProgress(item.id, wp);
+                }
+            });
+        }
     }
     
     showSummaryView() {
+        // Check if this was a final test BEFORE showing summary
+        if (this.isFinalTest) {
+            const totalQuestions = this.sessionStats.attempted;
+            const correctAnswers = this.sessionStats.correct;
+            const passRate = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+            
+            if (passRate === 100 && totalQuestions > 0) {
+                // Passed final test!
+                this.passFinalTest(this.currentBook, this.currentLesson);
+                const message = `🎉 Congratulations!\n\nYou passed the final test with ${correctAnswers}/${totalQuestions} correct (100%)!\n\nYou can now proceed to the next lesson.`;
+                alert(message);
+                this.showLessonView(this.currentBook, this.currentLesson);
+                return; // Don't show summary, go back to lesson view
+            } else {
+                // Failed - restart test (handled in nextQuestion)
+                // Don't show summary, just restart
+                return;
+            }
+        }
+        
+        // Regular session summary
         this.showView('summary-view');
         this.updateSummaryStats();
         this.renderWeakWords();
@@ -319,12 +732,25 @@ class VocabTrainer {
     // Rendering
     renderLessonsList() {
         const container = document.getElementById('lessons-list');
+        if (!container) {
+            console.error('❌ Lessons list container not found!');
+            return;
+        }
+        
         container.innerHTML = '';
         
         // Always reload progress to ensure we have latest data
         this.progress = this.loadProgress();
         
         const lessons = this.books[this.currentBook];
+        
+        if (!lessons || lessons.length === 0) {
+            console.error('❌ No lessons found for book', this.currentBook);
+            container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-light);">No lessons available. Please check data files.</div>';
+            return;
+        }
+        
+        console.log(`📚 Rendering ${lessons.length} lessons for Book ${this.currentBook}`);
         
         lessons.forEach(lessonData => {
             const card = document.createElement('div');
@@ -335,6 +761,8 @@ class VocabTrainer {
             
             const mastered = this.isLessonMastered(this.currentBook, lessonData.lesson);
             const unlocked = this.isLessonUnlocked(this.currentBook, lessonData.lesson);
+            
+            console.log(`  Lesson ${lessonData.lesson}: unlocked=${unlocked}, mastered=${mastered}`);
             
             // Count mastered words and correct answers
             let masteredCount = 0;
@@ -357,10 +785,17 @@ class VocabTrainer {
             let status = 'locked';
             let statusText = 'Locked';
             
-            if (mastered) {
+            const finalTestPassed = this.hasPassedFinalTest(this.currentBook, lessonData.lesson);
+            const readyForTest = this.isReadyForFinalTest(this.currentBook, lessonData.lesson);
+            
+            if (finalTestPassed) {
                 status = 'completed';
                 statusText = 'Completed';
                 card.classList.add('completed');
+            } else if (readyForTest) {
+                status = 'in-progress';
+                statusText = 'Final Test Ready';
+                card.classList.add('in-progress');
             } else if (unlocked) {
                 status = 'in-progress';
                 statusText = 'In Progress';
@@ -392,13 +827,35 @@ class VocabTrainer {
             `;
             
             if (unlocked) {
-                card.addEventListener('click', () => {
-                    this.showLessonView(this.currentBook, lessonData.lesson);
+                card.style.cursor = 'pointer';
+                // Use both click and mousedown to ensure it works
+                const handleClick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`🖱️ Clicked on lesson ${lessonData.lesson} (Book ${this.currentBook})`);
+                    try {
+                        this.showLessonView(this.currentBook, lessonData.lesson);
+                    } catch (error) {
+                        console.error('Error showing lesson view:', error);
+                        alert('Error loading lesson: ' + error.message);
+                    }
+                };
+                card.addEventListener('click', handleClick);
+                card.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) { // Left click only
+                        e.preventDefault();
+                    }
                 });
+            } else {
+                card.style.cursor = 'not-allowed';
+                // Add a tooltip or message for locked lessons
+                card.title = 'Complete the previous lesson to unlock this one';
             }
             
             container.appendChild(card);
         });
+        
+        console.log('✅ Lessons list rendered');
     }
     
     updateGlobalStats() {
@@ -425,67 +882,122 @@ class VocabTrainer {
         // Always reload from localStorage to get latest data
         this.progress = this.loadProgress();
         
-        // Count mastered words, correct answers, and attempted
-        let masteredCount = 0;
-        let correctCount = 0;
-        let attemptedCount = 0;
+        const total = lessonData.items.length;
         
-        lessonData.items.forEach(item => {
+        // Calculate progress for each mode
+        const englishArabicProgress = this.calculateModeProgress(lessonData.items, 'english-arabic');
+        const arabicEnglishProgress = this.calculateModeProgress(lessonData.items, 'arabic-english');
+        const mixedProgress = this.calculateModeProgress(lessonData.items, 'mixed');
+        
+        // Update English-Arabic progress
+        this.updateModeProgress('english-arabic', englishArabicProgress, total);
+        
+        // Update Arabic-English progress
+        this.updateModeProgress('arabic-english', arabicEnglishProgress, total);
+        
+        // Update Mixed progress
+        this.updateModeProgress('mixed', mixedProgress, total);
+    }
+    
+    calculateModeProgress(items, mode) {
+        let completed = 0;
+        
+        items.forEach(item => {
             const wp = this.getWordProgress(item.id);
-            if (this.isWordMastered(item.id)) {
-                masteredCount++;
-            }
-            if (wp.correct_count > 0) {
-                correctCount++;
-            }
-            if (wp.correct_count > 0 || wp.incorrect_count > 0) {
-                attemptedCount++;
+            
+            if (mode === 'english-arabic') {
+                // Completed if english_arabic_correct is true
+                if (wp.english_arabic_correct) {
+                    completed++;
+                }
+            } else if (mode === 'arabic-english') {
+                // Completed if arabic_english_correct is true
+                if (wp.arabic_english_correct) {
+                    completed++;
+                }
+            } else if (mode === 'mixed') {
+                // Completed if both directions are correct (mastered)
+                if (wp.english_arabic_correct && wp.arabic_english_correct) {
+                    completed++;
+                }
             }
         });
         
-        const total = lessonData.items.length;
-        const percentage = total > 0 ? (masteredCount / total) * 100 : 0;
+        return completed;
+    }
+    
+    updateModeProgress(mode, completed, total) {
+        const percentage = total > 0 ? (completed / total) * 100 : 0;
+        const isCompleted = completed === total && total > 0;
         
-        console.log(`📊 Lesson ${book}-${lesson}: ${masteredCount}/${total} mastered, ${correctCount} correct, ${attemptedCount} attempted`);
-        
-        // Build progress text showing mastered, correct, and attempted
-        let progressText = `Mastered ${masteredCount} / ${total} words`;
-        if (correctCount > masteredCount || attemptedCount > masteredCount) {
-            progressText += ' (';
-            if (correctCount > masteredCount) {
-                progressText += `${correctCount} correct`;
-                if (attemptedCount > correctCount) {
-                    progressText += `, ${attemptedCount} attempted`;
-                }
-            } else if (attemptedCount > masteredCount) {
-                progressText += `${attemptedCount} attempted`;
-            }
-            progressText += ')';
+        // Update progress bar
+        const progressFill = document.getElementById(`progress-${mode}`);
+        if (progressFill) {
+            progressFill.style.width = `${percentage}%`;
         }
         
-        document.getElementById('lesson-progress-text').textContent = progressText;
-        document.getElementById('lesson-progress-fill').style.width = `${percentage}%`;
+        // Update text
+        const progressText = document.getElementById(`text-${mode}`);
+        if (progressText) {
+            progressText.textContent = `${completed} / ${total} words`;
+        }
+        
+        // Update Go button
+        const goButton = document.getElementById(`go-${mode}-btn`);
+        if (goButton) {
+            if (isCompleted) {
+                goButton.disabled = true;
+                goButton.textContent = '✓ Completed';
+                goButton.classList.add('completed');
+            } else {
+                goButton.disabled = false;
+                goButton.textContent = 'Go';
+                goButton.classList.remove('completed');
+            }
+        }
+        
+        // Update card styling
+        const card = goButton?.closest('.mode-progress-card');
+        if (card) {
+            if (isCompleted) {
+                card.classList.add('completed');
+            } else {
+                card.classList.remove('completed');
+            }
+        }
     }
     
     // Question Generation
-    buildQuestionPool(book, lesson, reviewMistakesOnly = false) {
+    buildQuestionPool(book, lesson, reviewMistakesOnly = false, isFinalTest = false, mode = null) {
         const lessonData = this.books[book].find(l => l.lesson === lesson);
         if (!lessonData) return [];
         
         let pool = lessonData.items;
         
-        if (reviewMistakesOnly) {
+        if (isFinalTest) {
+            // Final test: use 75% of words, randomly selected
+            const totalWords = pool.length;
+            const testWordCount = Math.ceil(totalWords * 0.75);
+            pool = [...pool].sort(() => Math.random() - 0.5).slice(0, testWordCount);
+        } else if (mode === 'mixed') {
+            // Mixed mode: use 75% of words, randomly selected
+            const totalWords = pool.length;
+            const testWordCount = Math.ceil(totalWords * 0.75);
+            pool = [...pool].sort(() => Math.random() - 0.5).slice(0, testWordCount);
+        } else if (reviewMistakesOnly) {
             pool = pool.filter(item => {
                 const wp = this.getWordProgress(item.id);
                 return !wp.mastered && wp.incorrect_count > 0;
             });
         } else {
-            pool = pool.filter(item => !this.isWordMastered(item.id));
+            // Regular practice: use all words (each word shown once)
+            // Don't filter by mastery - show all words once per session
+            pool = [...lessonData.items];
         }
         
-        // If all words are mastered, use all words
-        if (pool.length === 0) {
-            pool = lessonData.items;
+        // If all words are mastered and not final test, still use all words for practice
+        if (pool.length === 0 && !isFinalTest) {
+            pool = [...lessonData.items];
         }
         
         // Weight by difficulty (higher incorrect_count, lower consecutive_correct)
@@ -501,20 +1013,36 @@ class VocabTrainer {
     }
     
     nextQuestion() {
+        // Check if we've completed all questions
         if (this.questionPool.length === 0) {
-            this.questionPool = this.buildQuestionPool(
-                this.currentBook,
-                this.currentLesson,
-                this.reviewMistakesOnly
-            );
+            // If final test failed (made a mistake), restart it
+            if (this.isFinalTest && this.sessionStats.incorrect > 0) {
+                const message = `❌ Final Test Failed\n\nYou got ${this.sessionStats.incorrect} question(s) wrong.\n\nRestarting the final test...`;
+                alert(message);
+                // Restart final test - reset pool and stats
+                this.sessionStats = {
+                    attempted: 0,
+                    correct: 0,
+                    incorrect: 0,
+                    weakWords: []
+                };
+                this.questionPool = this.buildQuestionPool(
+                    this.currentBook,
+                    this.currentLesson,
+                    false,
+                    true,
+                    'mixed'
+                );
+                this.totalQuestions = this.questionPool.length;
+                // Continue to next question
+            } else {
+                // Session complete - show summary
+                this.showSummaryView();
+                return;
+            }
         }
         
-        if (this.questionPool.length === 0) {
-            this.showSummaryView();
-            return;
-        }
-        
-        // Select random question from top 5 hardest
+        // Select random question from top 5 hardest (or all if less than 5)
         const topN = Math.min(5, this.questionPool.length);
         const randomIndex = Math.floor(Math.random() * topN);
         this.currentQuestion = this.questionPool.splice(randomIndex, 1)[0];
@@ -525,8 +1053,24 @@ class VocabTrainer {
             mode = Math.random() < 0.5 ? 'english-arabic' : 'arabic-english';
         }
         
+        // Store current mode for mastery tracking
+        this.currentQuestionMode = mode;
+        
         this.renderQuestion(mode);
         this.updateQuestionStats();
+    }
+    
+    getCurrentQuestionMode() {
+        // Determine the actual mode being used for the current question
+        if (this.currentMode === 'mixed') {
+            // Check which UI is displayed
+            if (document.getElementById('mcq-options').style.display !== 'none') {
+                return 'english-arabic';
+            } else {
+                return 'arabic-english';
+            }
+        }
+        return this.currentMode;
     }
     
     renderQuestion(mode) {
@@ -557,7 +1101,7 @@ class VocabTrainer {
             // Arabic → English Typing
             promptEl.innerHTML = `
                 <span class="arabic-text">${this.currentQuestion.arabic}</span>
-                <span class="transliteration">${this.currentQuestion.transliteration}</span>
+                <!-- <span class="transliteration">${this.currentQuestion.transliteration}</span> -->
             `;
             promptEl.className = 'prompt arabic';
             
@@ -600,7 +1144,7 @@ class VocabTrainer {
             label.htmlFor = `option-${index}`;
             label.innerHTML = `
                 <span class="arabic-text">${item.arabic}</span>
-                <span class="transliteration">${item.transliteration}</span>
+                <!-- <span class="transliteration">${item.transliteration}</span> -->
             `;
             
             option.appendChild(radio);
@@ -624,9 +1168,9 @@ class VocabTrainer {
         const nextBtn = document.getElementById('next-btn');
         
         let isCorrect = false;
+        const actualMode = this.getCurrentQuestionMode();
         
-        if (this.currentMode === 'english-arabic' || 
-            (this.currentMode === 'mixed' && document.getElementById('mcq-options').style.display !== 'none')) {
+        if (actualMode === 'english-arabic') {
             // MCQ mode
             const selected = document.querySelector('input[name="answer"]:checked');
             if (!selected) {
@@ -645,7 +1189,7 @@ class VocabTrainer {
                     opt.classList.add('incorrect');
                 }
             });
-        } else {
+        } else if (actualMode === 'arabic-english') {
             // Typing mode
             const userAnswer = document.getElementById('answer-input').value.trim().toLowerCase();
             const correctAnswer = this.currentQuestion.english.toLowerCase();
@@ -686,10 +1230,19 @@ class VocabTrainer {
             feedbackEl.innerHTML = '<strong>❌ Incorrect - Keep practicing!</strong>';
         }
         
-        // Save updated progress
+        // Save updated progress (this also syncs to Firebase)
         this.setWordProgress(this.currentQuestion.id, updatedProgress);
-        this.updateWordMastery(this.currentQuestion.id);
-        this.updateLessonMastery(this.currentBook, this.currentLesson);
+        
+        // Update mastery with actual mode information (actualMode already declared above)
+        this.updateWordMastery(this.currentQuestion.id, actualMode, isCorrect);
+        
+        // Save session state after each answer (for resume functionality)
+        this.saveSessionState();
+        
+        // Update lesson mastery (for final test eligibility)
+        if (this.isReadyForFinalTest(this.currentBook, this.currentLesson)) {
+            // Lesson is ready for final test, but not yet mastered until test is passed
+        }
         
         // Show correct answer
         const correctAnswerDiv = document.createElement('div');
@@ -697,7 +1250,7 @@ class VocabTrainer {
         correctAnswerDiv.innerHTML = `
             <div><strong>${this.currentQuestion.english}</strong></div>
             <div class="arabic-text">${this.currentQuestion.arabic}</div>
-            <div class="transliteration">${this.currentQuestion.transliteration}</div>
+            <!-- <div class="transliteration">${this.currentQuestion.transliteration}</div> -->
         `;
         feedbackEl.appendChild(correctAnswerDiv);
         
@@ -709,9 +1262,18 @@ class VocabTrainer {
     
     updateQuestionStats() {
         const questionNumber = this.sessionStats.attempted + 1;
-        document.getElementById('question-number').textContent = `Question ${questionNumber}`;
-        document.getElementById('question-stats').textContent = 
-            `Correct: ${this.sessionStats.correct} | Incorrect: ${this.sessionStats.incorrect}`;
+        const totalQuestions = this.totalQuestions || 0;
+        const remaining = this.questionPool.length;
+        
+        // Show progress: "Question X / Total" or "Question X" if total not set
+        if (totalQuestions > 0) {
+            document.getElementById('question-number').textContent = `Question ${questionNumber} / ${totalQuestions}`;
+        } else {
+            document.getElementById('question-number').textContent = `Question ${questionNumber}`;
+        }
+        
+        document.getElementById('question-correct-count').textContent = this.sessionStats.correct;
+        document.getElementById('question-incorrect-count').textContent = this.sessionStats.incorrect;
     }
     
     updateSummaryStats() {
@@ -746,7 +1308,7 @@ class VocabTrainer {
                 </div>
                 <div>
                     <span class="arabic-text">${item.arabic}</span>
-                    <span class="transliteration">${item.transliteration}</span>
+                    <!-- <span class="transliteration">${item.transliteration}</span> -->
                 </div>
             `;
             container.appendChild(wordEl);
@@ -760,6 +1322,33 @@ class VocabTrainer {
     
     // Event Listeners
     setupEventListeners() {
+        // Login buttons - use event delegation to ensure they work
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#google-login-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleGoogleLogin();
+            }
+            // Apple login disabled
+            // if (e.target.closest('#apple-login-btn')) {
+            //     e.preventDefault();
+            //     e.stopPropagation();
+            //     this.handleAppleLogin();
+            // }
+            if (e.target.closest('#skip-login-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                localStorage.setItem('skipped_login', 'true');
+                this.hideLoginView();
+            }
+        });
+        
+        // Navigation home button
+        document.getElementById('nav-home-btn').addEventListener('click', () => {
+            this.showDashboard();
+            this.updateGlobalStats();
+        });
+        
         // Book selector
         document.querySelectorAll('.book-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -771,40 +1360,77 @@ class VocabTrainer {
         });
         
         // Back buttons
-        document.getElementById('back-to-dashboard').addEventListener('click', () => {
+        document.getElementById('back-to-dashboard').addEventListener('click', async () => {
+            // Force sync to Firebase before leaving
+            if (window.firebaseSyncManager?.syncEnabled) {
+                await window.firebaseSyncManager.forceSync();
+            }
             this.showDashboard();
             this.updateGlobalStats();
         });
         
-        document.getElementById('back-to-lesson').addEventListener('click', () => {
+        document.getElementById('back-to-lesson').addEventListener('click', async () => {
+            // Save session state before leaving (so we can resume)
+            this.saveSessionState();
+            // Force sync to Firebase before leaving
+            if (window.firebaseSyncManager?.syncEnabled) {
+                await window.firebaseSyncManager.forceSync();
+            }
+            // Reload progress to ensure we have latest data
+            this.progress = this.loadProgress();
+            // Update lesson progress display
+            this.updateLessonProgress(this.currentBook, this.currentLesson);
+            this.showLessonView(this.currentBook, this.currentLesson);
+        });
+        
+        document.getElementById('back-to-lesson-summary').addEventListener('click', async () => {
+            // Save session state before leaving
+            this.saveSessionState();
+            // Force sync to Firebase before leaving
+            if (window.firebaseSyncManager?.syncEnabled) {
+                await window.firebaseSyncManager.forceSync();
+            }
             // Reload progress to ensure we have latest data
             this.progress = this.loadProgress();
             this.showLessonView(this.currentBook, this.currentLesson);
         });
         
-        document.getElementById('back-to-lesson-summary').addEventListener('click', () => {
-            // Reload progress to ensure we have latest data
-            this.progress = this.loadProgress();
-            this.showLessonView(this.currentBook, this.currentLesson);
+        // Mode Go buttons
+        document.getElementById('go-english-arabic-btn').addEventListener('click', () => {
+            this.startMode('english-arabic');
         });
         
-        // Lesson actions
-        document.getElementById('start-practice-btn').addEventListener('click', () => {
-            this.currentMode = document.getElementById('mode-select').value;
-            this.progress.lastMode = this.currentMode;
-            this.saveProgress();
-            this.reviewMistakesOnly = false;
-            this.questionPool = [];
-            this.showQuestionView();
+        document.getElementById('go-arabic-english-btn').addEventListener('click', () => {
+            this.startMode('arabic-english');
+        });
+        
+        document.getElementById('go-mixed-btn').addEventListener('click', () => {
+            this.startMode('mixed');
         });
         
         document.getElementById('review-mistakes-btn').addEventListener('click', () => {
-            this.currentMode = document.getElementById('mode-select').value;
+            // Use the last mode or default to english-arabic
+            this.currentMode = this.progress.lastMode || 'english-arabic';
             this.progress.lastMode = this.currentMode;
             this.saveProgress();
             this.reviewMistakesOnly = true;
+            this.isFinalTest = false;
             this.questionPool = [];
+            // Don't resume for review mistakes mode
             this.showQuestionView();
+        });
+        
+        document.getElementById('final-test-btn').addEventListener('click', () => {
+            if (confirm('Ready for the final test? This will test 75% of words in mixed mode (English→Arabic and Arabic→English). You need to pass to unlock the next lesson.')) {
+                this.currentMode = 'mixed';
+                this.reviewMistakesOnly = false;
+                this.isFinalTest = true;
+                this.questionPool = [];
+                // Clear any saved session state for final test
+                const sessionKey = `session_${this.currentBook}_${this.currentLesson}_mixed_final`;
+                localStorage.removeItem(sessionKey);
+                this.showQuestionView();
+            }
         });
         
         document.getElementById('reset-lesson-btn').addEventListener('click', () => {
@@ -817,6 +1443,8 @@ class VocabTrainer {
         });
         
         document.getElementById('next-btn').addEventListener('click', () => {
+            // Save session state after each question (for resume)
+            this.saveSessionState();
             this.nextQuestion();
         });
         
@@ -829,6 +1457,49 @@ class VocabTrainer {
                 } else {
                     this.nextQuestion();
                 }
+            }
+        });
+        
+        // Login buttons - use event delegation
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#google-login-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleGoogleLogin();
+            }
+            // Apple login disabled
+            // if (e.target.closest('#apple-login-btn')) {
+            //     e.preventDefault();
+            //     e.stopPropagation();
+            //     this.handleAppleLogin();
+            // }
+            if (e.target.closest('#skip-login-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                localStorage.setItem('skipped_login', 'true');
+                this.hideLoginView();
+            }
+        });
+        
+        // User menu
+        document.getElementById('user-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) {
+                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+        
+        document.getElementById('logout-btn')?.addEventListener('click', () => {
+            this.handleLogout();
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('user-dropdown');
+            const userBtn = document.getElementById('user-btn');
+            if (dropdown && userBtn && !userBtn.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
             }
         });
         
@@ -860,6 +1531,155 @@ class VocabTrainer {
         document.getElementById('reset-all-btn').addEventListener('click', () => {
             this.resetAllProgress();
         });
+    }
+    
+    // Authentication handlers
+    async handleGoogleLogin() {
+        console.log('🔄 Google login clicked');
+        const button = document.getElementById('google-login-btn');
+        
+        try {
+            if (button) {
+                button.disabled = true;
+                const originalHTML = button.innerHTML;
+                button.innerHTML = '<span>Signing in...</span>';
+            }
+            
+            // Check if Firebase Auth Manager is ready
+            if (!window.firebaseAuthManager || !window.firebaseAuthManager.auth) {
+                console.error('Firebase Auth Manager not ready');
+                throw new Error('Firebase Auth Manager not initialized');
+            }
+            
+            console.log('🔄 Calling signInWithGoogle...');
+            const user = await window.firebaseAuthManager.signInWithGoogle();
+            
+            // If user is null, it means we're using redirect (will be handled by checkRedirectResult)
+            if (!user) {
+                console.log('🔄 Redirecting to Google sign-in...');
+                // Show a message to the user
+                if (button) {
+                    button.innerHTML = '<span>Redirecting to Google...</span>';
+                }
+                return; // Don't hide login view yet - redirect will handle it
+            }
+            
+            console.log('✅ Signed in with Google:', user.email);
+            
+            this.hideLoginView();
+            this.updateUserUI(user);
+            window.firebaseSyncManager.setUserId(user.uid);
+            await this.syncProgressFromServer();
+        } catch (error) {
+            console.error('❌ Google login error:', error);
+            console.error('Error details:', {
+                code: error.code,
+                message: error.message,
+                email: error.email,
+                credential: error.credential
+            });
+            
+            let errorMessage = 'Failed to sign in with Google. ';
+            if (error.code === 'auth/popup-closed-by-user') {
+                errorMessage += 'The sign-in window was closed. Please try again.';
+            } else if (error.code === 'auth/popup-blocked') {
+                errorMessage += 'Popup was blocked by your browser. The page will redirect to Google sign-in instead.';
+                // Try redirect as fallback
+                try {
+                    const { signInWithRedirect, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+                    const provider = new GoogleAuthProvider();
+                    await signInWithRedirect(window.firebaseAuthManager.auth, provider);
+                    // Don't show alert if redirect succeeds
+                    return;
+                } catch (redirectError) {
+                    errorMessage += ' Redirect also failed. Please allow popups for this site.';
+                }
+            } else if (error.code === 'auth/operation-not-allowed') {
+                errorMessage += 'Google sign-in is not enabled. Please contact support.';
+            } else if (error.message) {
+                errorMessage += error.message;
+            }
+            
+            alert(errorMessage);
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<span class="login-icon">🔵</span><span>Continue with Google</span>';
+            }
+        }
+    }
+    
+    // Apple login disabled for now
+    // async handleAppleLogin() {
+    //     try {
+    //         const button = document.getElementById('apple-login-btn');
+    //         if (button) {
+    //             button.disabled = true;
+    //             button.textContent = 'Signing in...';
+    //         }
+    //         
+    //         const user = await window.firebaseAuthManager.signInWithApple();
+    //         if (user) {
+    //             console.log('✅ Signed in with Apple:', user.email);
+    //             this.hideLoginView();
+    //             this.updateUserUI(user);
+    //             window.firebaseSyncManager.setUserId(user.uid);
+    //             await this.syncProgressFromServer();
+    //         }
+    //     } catch (error) {
+    //         console.error('Apple login error:', error);
+    //         alert('Failed to sign in with Apple. Please try again.');
+    //     } finally {
+    //         const button = document.getElementById('apple-login-btn');
+    //         if (button) {
+    //             button.disabled = false;
+    //             button.innerHTML = '<span class="login-icon">⚫</span><span>Continue with Apple</span>';
+    //         }
+    //     }
+    // }
+    
+    async handleLogout() {
+        if (confirm('Are you sure you want to sign out? Your progress will still be saved locally.')) {
+            try {
+                await window.firebaseAuthManager.signOut();
+                window.firebaseSyncManager.setUserId(null);
+                this.hideUserUI();
+                localStorage.removeItem('skipped_login');
+                this.showLoginView();
+            } catch (error) {
+                console.error('Logout error:', error);
+                alert('Failed to sign out. Please try again.');
+            }
+        }
+    }
+    
+    startMode(mode) {
+        this.currentMode = mode;
+        this.progress.lastMode = mode;
+        this.saveProgress();
+        this.reviewMistakesOnly = false;
+        
+        // Check if there's a saved session to resume
+        const sessionKey = `session_${this.currentBook}_${this.currentLesson}_${mode}_normal`;
+        const savedSession = localStorage.getItem(sessionKey);
+        
+        if (savedSession) {
+            try {
+                const session = JSON.parse(savedSession);
+                if (session.questionPoolIds && session.questionPoolIds.length > 0) {
+                    // There's a saved session - resume it automatically
+                    console.log('📂 Found saved session, resuming...');
+                    this.showQuestionView();
+                    return; // showQuestionView will handle the resume
+                }
+            } catch (e) {
+                console.error('Error parsing saved session:', e);
+            }
+        }
+        
+        // No saved session or invalid - start fresh
+        this.questionPool = [];
+        this.showQuestionView();
     }
 }
 

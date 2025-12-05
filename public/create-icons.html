@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Icons</title>
+</head>
+<body>
+    <h1>Icon Generator</h1>
+    <p>This page will generate placeholder icons for the PWA.</p>
+    <canvas id="icon192" width="192" height="192" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    <canvas id="icon512" width="512" height="512" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    <br>
+    <button onclick="generateIcons()">Generate Icons</button>
+    <button onclick="downloadIcons()">Download Icons</button>
+    
+    <script>
+        function generateIcons() {
+            // Generate 192x192 icon
+            const canvas192 = document.getElementById('icon192');
+            const ctx192 = canvas192.getContext('2d');
+            
+            // Background gradient
+            const grad192 = ctx192.createLinearGradient(0, 0, 192, 192);
+            grad192.addColorStop(0, '#6366f1');
+            grad192.addColorStop(1, '#8b5cf6');
+            ctx192.fillStyle = grad192;
+            ctx192.fillRect(0, 0, 192, 192);
+            
+            // Text
+            ctx192.fillStyle = 'white';
+            ctx192.font = 'bold 80px Arial';
+            ctx192.textAlign = 'center';
+            ctx192.textBaseline = 'middle';
+            ctx192.fillText('🕌', 96, 96);
+            
+            // Generate 512x512 icon
+            const canvas512 = document.getElementById('icon512');
+            const ctx512 = canvas512.getContext('2d');
+            
+            const grad512 = ctx512.createLinearGradient(0, 0, 512, 512);
+            grad512.addColorStop(0, '#6366f1');
+            grad512.addColorStop(1, '#8b5cf6');
+            ctx512.fillStyle = grad512;
+            ctx512.fillRect(0, 0, 512, 512);
+            
+            ctx512.fillStyle = 'white';
+            ctx512.font = 'bold 200px Arial';
+            ctx512.textAlign = 'center';
+            ctx512.textBaseline = 'middle';
+            ctx512.fillText('🕌', 256, 256);
+        }
+        
+        function downloadIcons() {
+            // Download 192x192
+            const canvas192 = document.getElementById('icon192');
+            canvas192.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'icon-192.png';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+            
+            // Download 512x512
+            setTimeout(() => {
+                const canvas512 = document.getElementById('icon512');
+                canvas512.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'icon-512.png';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+            }, 500);
+        }
+        
+        // Auto-generate on load
+        window.onload = generateIcons;
+    </script>
+</body>
+</html>
+

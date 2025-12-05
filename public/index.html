@@ -2,17 +2,103 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#6366f1">
     <title>Madinah Arabic Vocab Trainer</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Load config
+        const firebaseConfig = {
+            apiKey: "AIzaSyC50gRTrmyS-Q6geZdMHCMCs3mI2_TwcN0",
+            authDomain: "arabic-vocab-trainer.firebaseapp.com",
+            projectId: "arabic-vocab-trainer",
+            storageBucket: "arabic-vocab-trainer.firebasestorage.app",
+            messagingSenderId: "578452653672",
+            appId: "1:578452653672:web:89e5613b79608294bedddd"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Make available globally
+        window.firebaseApp = app;
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+    </script>
 </head>
 <body>
+    <!-- Global Navigation Header -->
+    <nav class="global-nav">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="nav-icon">🕌</span>
+                <span class="nav-title">Madinah Arabic Vocab Trainer</span>
+            </div>
+            <div class="nav-actions">
+                <button id="nav-home-btn" class="nav-btn">
+                    <span>🏠</span>
+                    <span>Home</span>
+                </button>
+                <div id="user-menu" class="user-menu" style="display: none;">
+                    <button id="user-btn" class="nav-btn user-btn">
+                        <span id="user-avatar">👤</span>
+                        <span id="user-name">User</span>
+                    </button>
+                    <div id="user-dropdown" class="user-dropdown" style="display: none;">
+                        <div class="user-info">
+                            <div id="dropdown-user-name"></div>
+                            <div id="dropdown-user-email"></div>
+                        </div>
+                        <button id="logout-btn" class="dropdown-item">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Login View -->
+    <div id="login-view" class="view" style="display: none;">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <span class="login-icon">🕌</span>
+                    <h1>Madinah Arabic Vocab Trainer</h1>
+                    <p>Sign in to sync your progress across devices</p>
+                </div>
+                
+                <div class="login-options">
+                    <button id="google-login-btn" class="login-btn google-btn">
+                        <span class="login-icon">🔵</span>
+                        <span>Continue with Google</span>
+                    </button>
+                </div>
+                
+                <div class="login-footer">
+                    <p class="login-note">You can use the app offline, but signing in lets you sync progress across devices.</p>
+                    <button id="skip-login-btn" class="skip-btn">Continue without signing in</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="app">
         <!-- Dashboard View -->
         <div id="dashboard-view" class="view active">
-            <header>
-                <h1>🕌 Madinah Arabic Vocab Trainer</h1>
+            <header class="page-header">
+                <h1>Vocabulary Dashboard</h1>
+                <p class="page-subtitle">Select a book and lesson to begin practicing</p>
             </header>
             
             <div class="book-selector">
@@ -40,31 +126,60 @@
         
         <!-- Lesson View -->
         <div id="lesson-view" class="view">
-            <header>
-                <button id="back-to-dashboard" class="btn-back">← Back</button>
-                <h2 id="lesson-title"></h2>
+            <header class="page-header">
+                <div class="breadcrumb">
+                    <button id="back-to-dashboard" class="breadcrumb-link">← Dashboard</button>
+                    <span class="breadcrumb-separator">/</span>
+                    <span id="lesson-title" class="breadcrumb-current"></span>
+                </div>
             </header>
             
-            <div class="lesson-progress">
-                <div class="progress-bar">
-                    <div id="lesson-progress-fill" class="progress-fill"></div>
+            <div class="mode-progress-container">
+                <!-- English-Arabic Progress -->
+                <div class="mode-progress-card">
+                    <div class="mode-progress-header">
+                        <h3>English → Arabic</h3>
+                        <button id="go-english-arabic-btn" class="btn btn-primary btn-go">Go</button>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-english-arabic" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="text-english-arabic">0 / 0 words</span>
+                    </div>
                 </div>
-                <div class="progress-text">
-                    <span id="lesson-progress-text">Mastered 0 / 0 words</span>
+                
+                <!-- Arabic-English Progress -->
+                <div class="mode-progress-card">
+                    <div class="mode-progress-header">
+                        <h3>Arabic → English</h3>
+                        <button id="go-arabic-english-btn" class="btn btn-primary btn-go">Go</button>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-arabic-english" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="text-arabic-english">0 / 0 words</span>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="mode-selector">
-                <label>Practice Mode:</label>
-                <select id="mode-select">
-                    <option value="english-arabic">English → Arabic (MCQ)</option>
-                    <option value="arabic-english">Arabic → English (Typing)</option>
-                    <option value="mixed">Mixed</option>
-                </select>
+                
+                <!-- Mixed Progress -->
+                <div class="mode-progress-card">
+                    <div class="mode-progress-header">
+                        <h3>Mixed</h3>
+                        <button id="go-mixed-btn" class="btn btn-primary btn-go">Go</button>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-mixed" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="text-mixed">0 / 0 words</span>
+                    </div>
+                </div>
             </div>
             
             <div class="lesson-actions">
-                <button id="start-practice-btn" class="btn btn-primary">Start Practice</button>
+                <button id="final-test-btn" class="btn btn-success" style="display: none;">Take Final Test (75% Mixed)</button>
                 <button id="review-mistakes-btn" class="btn btn-secondary">Review Mistakes Only</button>
                 <button id="reset-lesson-btn" class="btn btn-danger">Reset This Lesson</button>
             </div>
@@ -72,11 +187,25 @@
         
         <!-- Question View -->
         <div id="question-view" class="view">
-            <header>
-                <button id="back-to-lesson" class="btn-back">← Back</button>
-                <div class="question-header">
-                    <span id="question-number">Question 1</span>
-                    <span id="question-stats">Correct: 0 | Incorrect: 0</span>
+            <header class="page-header">
+                <div class="breadcrumb">
+                    <button id="back-to-lesson" class="breadcrumb-link">← Lesson</button>
+                    <span class="breadcrumb-separator">/</span>
+                    <span id="question-number" class="breadcrumb-current">Question 1</span>
+                </div>
+                <div id="final-test-banner" class="final-test-banner" style="display: none;">
+                    <span class="banner-icon">🎯</span>
+                    <span class="banner-text">Final Test - 75% Mixed Mode - Need 100% to Pass</span>
+                </div>
+                <div class="question-stats-bar">
+                    <div class="stat-badge correct-badge">
+                        <span class="stat-icon">✅</span>
+                        <span id="question-correct-count">0</span>
+                    </div>
+                    <div class="stat-badge incorrect-badge">
+                        <span class="stat-icon">❌</span>
+                        <span id="question-incorrect-count">0</span>
+                    </div>
                 </div>
             </header>
             
@@ -102,8 +231,12 @@
         
         <!-- Summary View -->
         <div id="summary-view" class="view">
-            <header>
-                <h2>📊 Session Summary</h2>
+            <header class="page-header">
+                <div class="breadcrumb">
+                    <button id="back-to-lesson-summary" class="breadcrumb-link">← Lesson</button>
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-current">Session Summary</span>
+                </div>
             </header>
             
             <div class="summary-stats">
@@ -133,7 +266,23 @@
         </div>
     </div>
     
+    <script src="firebase-auth.js"></script>
+    <script src="firebase-sync.js"></script>
     <script src="main.js"></script>
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>
 
