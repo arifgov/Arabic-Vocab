@@ -26,83 +26,146 @@ class VocabTrainer {
     }
     
     async init() {
+        console.log('🚀 App init() started');
         // Initialize Firebase
         await this.initFirebase();
+        console.log('✅ initFirebase() completed');
+        
+        // Give Firebase a moment to process auth state after redirect
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // Check for redirect result (after Google sign-in redirect)
+        // This must be done AFTER initFirebase so auth state listener is set up
+        console.log('🔄 Calling checkRedirectResult()...');
         await this.checkRedirectResult();
+        console.log('✅ checkRedirectResult() completed');
         
         // Check auth state and show login if needed
+        // This will be handled by onAuthStateChanged, but we check here for initial state
+        console.log('🔄 Calling checkAuthState()...');
         await this.checkAuthState();
+        console.log('✅ checkAuthState() completed');
         
         await this.loadData();
         this.setupEventListeners();
-        this.showDashboard();
+        await this.showDashboard();
         this.updateGlobalStats();
     }
     
     async checkRedirectResult() {
         try {
-            if (window.firebaseAuthManager && window.firebaseAuthManager.auth) {
-                const user = await window.firebaseAuthManager.checkRedirectResult();
-                if (user) {
-                    console.log('✅ Sign-in completed via redirect');
-                    window.firebaseSyncManager.setUserId(user.uid);
-                    this.updateUserUI(user);
-                    await this.syncProgressFromServer();
-                    this.hideLoginView();
-                }
+            // Redirect result is already checked in firebase-auth.js init()
+            // Just verify the user state and ensure UI is updated
+            const user = window.firebaseAuthManager?.getCurrentUser();
+            if (user) {
+                console.log('✅ User is authenticated in checkRedirectResult:', user.email);
+                // Ensure UI is updated (handleAuthStateChange should have done this, but double-check)
+                this.updateUserUI(user);
+                window.firebaseSyncManager.setUserId(user.uid);
+                await this.syncProgressFromServer();
+                this.hideLoginView();
+                return true;
+            } else {
+                console.log('ℹ️ No user found in checkRedirectResult');
             }
         } catch (error) {
-            console.log('No redirect result or error:', error);
+            console.error('❌ Error checking auth state:', error);
         }
+        return false;
     }
     
     async initFirebase() {
         try {
-            // Initialize Firebase Auth
-            await window.firebaseAuthManager.init();
+            console.log('🔄 initFirebase() started');
+            // Set up auth state listener FIRST, before init()
+            // This ensures the callback is ready when redirect result is processed
+            console.log('🔄 Setting up onAuthStateChanged callback...');
+            window.firebaseAuthManager.onAuthStateChanged = (user) => {
+                console.log('📞 onAuthStateChanged callback triggered with user:', user ? user.email : 'null');
+                this.handleAuthStateChange(user);
+            };
+            
+            // Initialize Firebase Auth (this will check redirect result and trigger callbacks)
+            console.log('🔄 Calling firebaseAuthManager.init()...');
+            console.log('📋 firebaseAuthManager exists?', !!window.firebaseAuthManager);
+            console.log('📋 firebaseAuthManager.init exists?', typeof window.firebaseAuthManager?.init);
+            try {
+                await window.firebaseAuthManager.init();
+                console.log('✅ firebaseAuthManager.init() completed');
+            } catch (error) {
+                console.error('❌ Error in firebaseAuthManager.init():', error);
+                console.error('Error stack:', error.stack);
+                throw error;
+            }
+            
+            // Check current auth state directly from Firebase as a fallback
+            console.log('🔄 Checking current auth state directly from Firebase...');
+            if (window.firebaseAuth) {
+                const currentUser = window.firebaseAuth.currentUser;
+                console.log('📋 Firebase currentUser:', currentUser ? `${currentUser.email} (${currentUser.uid})` : 'null');
+                if (currentUser && !window.firebaseAuthManager.getCurrentUser()) {
+                    console.log('⚠️ Firebase has user but firebaseAuthManager doesn\'t - syncing state...');
+                    window.firebaseAuthManager.user = currentUser;
+                    if (window.firebaseAuthManager.onAuthStateChanged) {
+                        window.firebaseAuthManager.onAuthStateChanged(currentUser);
+                    }
+                }
+            }
             
             // Initialize Firebase Sync
             await window.firebaseSyncManager.init();
             
-            // Set up auth state listener
-            window.firebaseAuthManager.onAuthStateChanged = (user) => {
-                this.handleAuthStateChange(user);
-            };
-            
             console.log('✅ Firebase initialized');
         } catch (error) {
             console.error('Firebase initialization error:', error);
+            console.error('Error stack:', error.stack);
             // Continue without Firebase if it fails
         }
     }
     
     async checkAuthState() {
+        console.log('🔄 checkAuthState() called');
         const user = window.firebaseAuthManager?.getCurrentUser();
+        console.log('📋 User from getCurrentUser():', user ? `${user.email} (${user.uid})` : 'null');
+        
         if (!user) {
             // Check if user previously skipped login
             const skippedLogin = localStorage.getItem('skipped_login');
+            console.log('📋 Skipped login flag:', skippedLogin);
             if (!skippedLogin) {
+                console.log('👤 No user and no skipped login - showing login view');
                 this.showLoginView();
+            } else {
+                console.log('👤 No user but login was skipped - continuing without auth');
             }
         } else {
+            console.log('✅ User is authenticated in checkAuthState, setting up sync...');
             // User is authenticated, set up sync
             window.firebaseSyncManager.setUserId(user.uid);
             // Try to load progress from Firestore
             await this.syncProgressFromServer();
+            // Ensure UI is updated
+            this.updateUserUI(user);
+            this.hideLoginView();
         }
     }
     
-    handleAuthStateChange(user) {
+    async handleAuthStateChange(user) {
+        console.log('🔄 handleAuthStateChange called:', user ? `user: ${user.email}, uid: ${user.uid}` : 'signed out');
         if (user) {
+            console.log('✅ User is authenticated, updating UI and syncing...');
             window.firebaseSyncManager.setUserId(user.uid);
             this.updateUserUI(user);
-            // Sync progress in background (don't block UI)
-            this.syncProgressFromServer().catch(err => {
-                console.warn('Background sync failed:', err);
-            });
+            // Sync progress from server when user signs in
+            try {
+                await this.syncProgressFromServer();
+            } catch (error) {
+                console.error('Error syncing progress:', error);
+            }
+            this.hideLoginView();
+            console.log('✅ Login complete, UI updated');
         } else {
+            console.log('ℹ️ User signed out');
             window.firebaseSyncManager.setUserId(null);
             this.hideUserUI();
         }
@@ -515,7 +578,7 @@ class VocabTrainer {
         this.updateGlobalStats();
     }
     
-    showLessonView(book, lesson) {
+    async showLessonView(book, lesson) {
         console.log(`📖 Showing lesson view: Book ${book}, Lesson ${lesson}`);
         this.currentBook = book;
         this.currentLesson = lesson;
@@ -529,7 +592,7 @@ class VocabTrainer {
         if (!lessonData) {
             console.error(`❌ Lesson ${lesson} not found in Book ${book}`);
             alert(`Lesson ${lesson} not found in Book ${book}`);
-            this.showDashboard();
+            await this.showDashboard();
             return;
         }
         
@@ -679,16 +742,12 @@ class VocabTrainer {
         if (lessonData) {
             lessonData.items.forEach(item => {
                 const wp = this.getWordProgress(item.id);
-                // Reset session tracking but keep mastery status if already mastered
-                if (!wp.mastered) {
-                    // Only reset if not already mastered
-                    wp.session_english_arabic = false;
-                    wp.session_arabic_english = false;
-                    // Reset direction flags for new session (need both correct in one go)
-                    wp.english_arabic_correct = false;
-                    wp.arabic_english_correct = false;
-                    this.setWordProgress(item.id, wp);
-                }
+                // Reset only temporary session tracking flags
+                // DO NOT reset english_arabic_correct or arabic_english_correct - these track
+                // permanent progress across sessions and should only be reset when a mistake is made
+                wp.session_english_arabic = false;
+                wp.session_arabic_english = false;
+                this.setWordProgress(item.id, wp);
             });
         }
     }
@@ -1321,30 +1380,41 @@ class VocabTrainer {
     
     // Event Listeners
     setupEventListeners() {
-        // Login buttons - use event delegation to ensure they work
+        // Single document-level click handler for all click events
         document.addEventListener('click', (e) => {
+            // Login buttons
             if (e.target.closest('#google-login-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleGoogleLogin();
+                return;
             }
             // Apple login disabled
             // if (e.target.closest('#apple-login-btn')) {
             //     e.preventDefault();
             //     e.stopPropagation();
             //     this.handleAppleLogin();
+            //     return;
             // }
             if (e.target.closest('#skip-login-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
                 localStorage.setItem('skipped_login', 'true');
                 this.hideLoginView();
+                return;
+            }
+            
+            // User dropdown - close if clicking outside
+            const dropdown = document.getElementById('user-dropdown');
+            const userBtn = document.getElementById('user-btn');
+            if (dropdown && userBtn && !userBtn.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
             }
         });
         
         // Navigation home button
-        document.getElementById('nav-home-btn').addEventListener('click', () => {
-            this.showDashboard();
+        document.getElementById('nav-home-btn').addEventListener('click', async () => {
+            await this.showDashboard();
             this.updateGlobalStats();
         });
         
@@ -1364,7 +1434,7 @@ class VocabTrainer {
             if (window.firebaseSyncManager?.syncEnabled) {
                 await window.firebaseSyncManager.forceSync();
             }
-            this.showDashboard();
+            await this.showDashboard();
             this.updateGlobalStats();
         });
         
@@ -1456,49 +1526,6 @@ class VocabTrainer {
                 } else {
                     this.nextQuestion();
                 }
-            }
-        });
-        
-        // Login buttons - use event delegation
-        document.addEventListener('click', (e) => {
-            if (e.target.closest('#google-login-btn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handleGoogleLogin();
-            }
-            // Apple login disabled
-            // if (e.target.closest('#apple-login-btn')) {
-            //     e.preventDefault();
-            //     e.stopPropagation();
-            //     this.handleAppleLogin();
-            // }
-            if (e.target.closest('#skip-login-btn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                localStorage.setItem('skipped_login', 'true');
-                this.hideLoginView();
-            }
-        });
-        
-        // User menu
-        document.getElementById('user-btn')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const dropdown = document.getElementById('user-dropdown');
-            if (dropdown) {
-                dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-            }
-        });
-        
-        document.getElementById('logout-btn')?.addEventListener('click', () => {
-            this.handleLogout();
-        });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            const dropdown = document.getElementById('user-dropdown');
-            const userBtn = document.getElementById('user-btn');
-            if (dropdown && userBtn && !userBtn.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = 'none';
             }
         });
         
