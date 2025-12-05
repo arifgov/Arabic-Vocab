@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test localStorage</title>
+</head>
+<body>
+    <h1>localStorage Test</h1>
+    <button onclick="testSave()">Test Save</button>
+    <button onclick="testLoad()">Test Load</button>
+    <button onclick="testClear()">Clear All</button>
+    <pre id="output"></pre>
+    
+    <script>
+        function testSave() {
+            const testData = {
+                wordProgress: {
+                    'b1_l1_001': {
+                        correct_count: 1,
+                        incorrect_count: 0,
+                        consecutive_correct: 1,
+                        mastered: false
+                    }
+                },
+                lessonStatus: { 1: {}, 2: {} },
+                lastBook: 1,
+                lastLesson: 1,
+                lastMode: 'english-arabic'
+            };
+            
+            try {
+                localStorage.setItem('madinah_vocab_progress', JSON.stringify(testData));
+                document.getElementById('output').textContent = '✅ Saved successfully!\n' + JSON.stringify(testData, null, 2);
+            } catch (e) {
+                document.getElementById('output').textContent = '❌ Error: ' + e.message;
+            }
+        }
+        
+        function testLoad() {
+            try {
+                const stored = localStorage.getItem('madinah_vocab_progress');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    document.getElementById('output').textContent = '✅ Loaded successfully!\n' + JSON.stringify(parsed, null, 2);
+                } else {
+                    document.getElementById('output').textContent = '⚠️ No data found in localStorage';
+                }
+            } catch (e) {
+                document.getElementById('output').textContent = '❌ Error: ' + e.message;
+            }
+        }
+        
+        function testClear() {
+            localStorage.removeItem('madinah_vocab_progress');
+            document.getElementById('output').textContent = '✅ Cleared localStorage';
+        }
+        
+        // Auto-load on page load
+        window.onload = testLoad;
+    </script>
+</body>
+</html>
+

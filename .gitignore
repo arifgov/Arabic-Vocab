@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Data files (if you want to keep them private)
+# public/data/*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+

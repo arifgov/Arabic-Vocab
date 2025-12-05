@@ -1,0 +1,17 @@
+{
+  "name": "madinah-arabic-vocab-trainer",
+  "version": "1.0.0",
+  "description": "Arabic vocabulary trainer for Madinah Arabic books",
+  "scripts": {
+    "extract": "node scripts/extract_vocab.js",
+    "extract-ocr": "node scripts/extract_from_ocr.js"
+  },
+  "dependencies": {
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {},
+  "keywords": ["arabic", "vocabulary", "learning"],
+  "author": "",
+  "license": "MIT"
+}
+

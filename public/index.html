@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madinah Arabic Vocab Trainer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div id="app">
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view active">
+            <header>
+                <h1>🕌 Madinah Arabic Vocab Trainer</h1>
+            </header>
+            
+            <div class="book-selector">
+                <button class="book-btn active" data-book="1"><span>📖 Book 1</span></button>
+                <button class="book-btn" data-book="2"><span>📚 Book 2</span></button>
+            </div>
+            
+            <div class="global-stats">
+                <div class="stat-item">
+                    <span class="stat-label">📝 Total Words</span>
+                    <span id="total-words" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">✅ Mastered</span>
+                    <span id="total-mastered" class="stat-value">0</span>
+                </div>
+            </div>
+            
+            <div id="lessons-list" class="lessons-list"></div>
+            
+            <div class="actions">
+                <button id="reset-all-btn" class="btn btn-danger">Reset All Progress</button>
+            </div>
+        </div>
+        
+        <!-- Lesson View -->
+        <div id="lesson-view" class="view">
+            <header>
+                <button id="back-to-dashboard" class="btn-back">← Back</button>
+                <h2 id="lesson-title"></h2>
+            </header>
+            
+            <div class="lesson-progress">
+                <div class="progress-bar">
+                    <div id="lesson-progress-fill" class="progress-fill"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="lesson-progress-text">Mastered 0 / 0 words</span>
+                </div>
+            </div>
+            
+            <div class="mode-selector">
+                <label>Practice Mode:</label>
+                <select id="mode-select">
+                    <option value="english-arabic">English → Arabic (MCQ)</option>
+                    <option value="arabic-english">Arabic → English (Typing)</option>
+                    <option value="mixed">Mixed</option>
+                </select>
+            </div>
+            
+            <div class="lesson-actions">
+                <button id="start-practice-btn" class="btn btn-primary">Start Practice</button>
+                <button id="review-mistakes-btn" class="btn btn-secondary">Review Mistakes Only</button>
+                <button id="reset-lesson-btn" class="btn btn-danger">Reset This Lesson</button>
+            </div>
+        </div>
+        
+        <!-- Question View -->
+        <div id="question-view" class="view">
+            <header>
+                <button id="back-to-lesson" class="btn-back">← Back</button>
+                <div class="question-header">
+                    <span id="question-number">Question 1</span>
+                    <span id="question-stats">Correct: 0 | Incorrect: 0</span>
+                </div>
+            </header>
+            
+            <div class="question-container">
+                <div id="question-prompt" class="prompt"></div>
+                
+                <div id="mcq-options" class="mcq-options" style="display: none;">
+                    <!-- Radio buttons will be inserted here -->
+                </div>
+                
+                <div id="typing-input-container" class="typing-input-container" style="display: none;">
+                    <input type="text" id="answer-input" placeholder="Type the English meaning" autocomplete="off">
+                </div>
+                
+                <div class="question-actions">
+                    <button id="check-btn" class="btn btn-primary">Check</button>
+                    <button id="next-btn" class="btn btn-secondary" style="display: none;">Next</button>
+                </div>
+                
+                <div id="feedback" class="feedback"></div>
+            </div>
+        </div>
+        
+        <!-- Summary View -->
+        <div id="summary-view" class="view">
+            <header>
+                <h2>📊 Session Summary</h2>
+            </header>
+            
+            <div class="summary-stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="summary-attempted">0</div>
+                    <div class="stat-label">📝 Attempted</div>
+                </div>
+                <div class="stat-card correct">
+                    <div class="stat-number" id="summary-correct">0</div>
+                    <div class="stat-label">✅ Correct</div>
+                </div>
+                <div class="stat-card incorrect">
+                    <div class="stat-number" id="summary-incorrect">0</div>
+                    <div class="stat-label">❌ Incorrect</div>
+                </div>
+            </div>
+            
+                <div id="weak-words-list" class="weak-words-list">
+                    <h3>📌 Words to Review</h3>
+                </div>
+            
+            <div class="summary-actions">
+                <button id="review-again-btn" class="btn btn-secondary">Review Mistakes Only</button>
+                <button id="back-to-lesson-summary" class="btn btn-primary">Back to Lesson</button>
+                <button id="next-lesson-btn" class="btn btn-success" style="display: none;">Next Lesson</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="main.js"></script>
+</body>
+</html>
+
