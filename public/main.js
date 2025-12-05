@@ -1411,6 +1411,29 @@ class VocabTrainer {
             }
         });
         
+        // User menu button - toggle dropdown
+        const userBtn = document.getElementById('user-btn');
+        if (userBtn) {
+            userBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const dropdown = document.getElementById('user-dropdown');
+                if (dropdown) {
+                    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+        }
+        
+        // Logout button
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                // Close dropdown first
+                const dropdown = document.getElementById('user-dropdown');
+                if (dropdown) dropdown.style.display = 'none';
+                this.handleLogout();
+            });
+        }
+        
         // Navigation home button
         document.getElementById('nav-home-btn').addEventListener('click', async () => {
             await this.showDashboard();
@@ -1566,7 +1589,7 @@ class VocabTrainer {
         try {
             if (button) {
                 button.disabled = true;
-                button.innerHTML = '<span class="login-icon">🔵</span><span>Redirecting...</span>';
+                button.innerHTML = '<span class="login-icon">🔵</span><span>Signing in...</span>';
             }
             
             // Check if Firebase Auth Manager is ready
@@ -1575,10 +1598,16 @@ class VocabTrainer {
                 throw new Error('Firebase Auth Manager not initialized');
             }
             
-            console.log('🔄 Redirecting to Google sign-in...');
-            // This will redirect the page, so we won't reach the code below
-            await window.firebaseAuthManager.signInWithGoogle();
-            // If we get here, something went wrong (shouldn't happen with redirect)
+            console.log('🔄 Opening Google sign-in popup...');
+            const user = await window.firebaseAuthManager.signInWithGoogle();
+            
+            if (user) {
+                console.log('✅ Google sign-in successful:', user.email);
+                // The onAuthStateChanged callback will handle the UI update
+            } else {
+                // Redirect was used (popup blocked) - page will reload
+                console.log('ℹ️ Redirect initiated, waiting for page reload...');
+            }
         } catch (error) {
             console.error('❌ Google login error:', error);
             console.error('Error details:', {
@@ -1591,6 +1620,8 @@ class VocabTrainer {
             let errorMessage = 'Failed to sign in with Google. ';
             if (error.code === 'auth/operation-not-allowed') {
                 errorMessage += 'Google sign-in is not enabled. Please contact support.';
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                errorMessage = 'Sign-in cancelled.';
             } else if (error.message) {
                 errorMessage += error.message;
             } else {

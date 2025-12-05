@@ -36,7 +36,7 @@ class FirebaseAuth {
 
     async init() {
         console.log('🔄 Firebase Auth init() started...');
-        console.log('📋 Version check: firebase-auth.js v3.0 (with authReady tracking)');
+        console.log('📋 Version check: firebase-auth.js v4.0 (popup-based auth)');
         
         // Wait for Firebase to be initialized
         let waitCount = 0;
@@ -51,68 +51,55 @@ class FirebaseAuth {
         this.auth = window.firebaseAuth;
         console.log('✅ Firebase Auth initialized, auth object:', this.auth);
         
-        // Check for redirect result FIRST before setting up listener
-        // This ensures we know if this is a redirect login before onAuthStateChanged fires
-        let redirectUser = null;
-        try {
-            console.log('🔄 Checking for redirect result...');
-            const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-            console.log('✅ getRedirectResult imported, calling it...');
-            const redirectResult = await getRedirectResult(this.auth);
-            console.log('📋 Redirect result:', redirectResult);
-            if (redirectResult && redirectResult.user) {
-                console.log('✅ Redirect result found, user:', redirectResult.user.email);
-                redirectUser = redirectResult.user;
-            } else {
-                console.log('ℹ️ No redirect result found');
-            }
-        } catch (error) {
-            console.error('❌ Error checking redirect result:', error);
-            console.error('Error details:', error.message, error.stack);
-        }
-        
-        // Now set up auth state listener
+        // Set up auth state listener FIRST
         console.log('🔄 Setting up auth state listener...');
-        this.auth.onAuthStateChanged((user) => {
-            console.log('🔔 Firebase auth state changed:', user ? `user: ${user.email}, uid: ${user.uid}` : 'signed out');
-            this.user = user;
-            
-            // Mark auth as ready on first callback (or if redirect user found)
-            if (!this.authReady) {
-                this._setAuthReady(user);
-            }
-            
-            if (this.onAuthStateChanged) {
-                console.log('📞 Calling onAuthStateChanged callback...');
-                this.onAuthStateChanged(user);
-            } else {
-                console.warn('⚠️ onAuthStateChanged callback not set!');
-            }
+        
+        // Create a promise that resolves when we get the first auth state
+        const firstAuthState = new Promise((resolve) => {
+            const unsubscribe = this.auth.onAuthStateChanged((user) => {
+                console.log('🔔 Firebase auth state changed:', user ? `user: ${user.email}, uid: ${user.uid}` : 'signed out');
+                this.user = user;
+                
+                // Only resolve on first callback
+                if (!this.authReady) {
+                    console.log('🎯 First auth state received, setting ready...');
+                    this._setAuthReady(user);
+                    resolve(user);
+                }
+                
+                if (this.onAuthStateChanged) {
+                    console.log('📞 Calling onAuthStateChanged callback...');
+                    this.onAuthStateChanged(user);
+                } else {
+                    console.warn('⚠️ onAuthStateChanged callback not set!');
+                }
+            });
         });
         console.log('✅ Auth state listener set up');
         
-        // If we got a redirect user, make sure it's set and callback is triggered
-        if (redirectUser) {
-            console.log('🔄 Processing redirect user...');
-            this.user = redirectUser;
-            this._setAuthReady(redirectUser);
-            if (this.onAuthStateChanged) {
-                console.log('📞 Manually triggering onAuthStateChanged with redirect user...');
-                this.onAuthStateChanged(redirectUser);
+        // Check for redirect result (fallback for when popup was blocked)
+        try {
+            console.log('🔄 Checking for redirect result...');
+            const { getRedirectResult } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+            const redirectResult = await getRedirectResult(this.auth);
+            if (redirectResult && redirectResult.user) {
+                console.log('✅ Redirect result found, user:', redirectResult.user.email);
+                // Auth state listener will handle this
+            } else {
+                console.log('ℹ️ No redirect result');
             }
-        } else {
-            // Wait a moment for auth state to be determined, then check currentUser
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            if (!this.authReady) {
-                const currentUser = this.auth.currentUser;
-                console.log('📋 Checking auth.currentUser:', currentUser ? `${currentUser.email} (${currentUser.uid})` : 'null');
-                this._setAuthReady(currentUser);
-                if (currentUser && this.onAuthStateChanged) {
-                    console.log('📞 Triggering onAuthStateChanged with currentUser...');
-                    this.onAuthStateChanged(currentUser);
-                }
-            }
+        } catch (error) {
+            console.error('❌ Error checking redirect result:', error.message);
+        }
+        
+        // Wait for first auth state (with timeout)
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
+        await Promise.race([firstAuthState, timeoutPromise]);
+        
+        // If still not ready, set it now
+        if (!this.authReady) {
+            console.log('⏰ Timeout waiting for auth state, using currentUser');
+            this._setAuthReady(this.auth.currentUser);
         }
         
         console.log('✅ Firebase Auth init() completed, authReady:', this.authReady, 'user:', this.user?.email);
@@ -125,21 +112,32 @@ class FirebaseAuth {
         
         try {
             console.log('🔄 Loading Firebase Auth modules...');
-            const { signInWithRedirect, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+            const { signInWithPopup, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
             
             console.log('🔄 Creating Google provider...');
             const provider = new GoogleAuthProvider();
             provider.addScope('profile');
             provider.addScope('email');
             
-            console.log('🔄 Redirecting to Google sign-in...');
-            await signInWithRedirect(this.auth, provider);
-            // Return null - the redirect will handle the rest
-            return null;
+            console.log('🔄 Opening Google sign-in popup...');
+            const result = await signInWithPopup(this.auth, provider);
+            console.log('✅ Google sign-in successful:', result.user.email);
+            return result.user;
         } catch (error) {
             console.error('❌ Google sign-in error:', error);
             console.error('Error code:', error.code);
             console.error('Error message:', error.message);
+            
+            // If popup blocked, fall back to redirect
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+                console.log('🔄 Popup blocked/closed, trying redirect...');
+                const { signInWithRedirect, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+                const redirectProvider = new GoogleAuthProvider();
+                redirectProvider.addScope('profile');
+                redirectProvider.addScope('email');
+                await signInWithRedirect(this.auth, redirectProvider);
+                return null;
+            }
             throw error;
         }
     }
