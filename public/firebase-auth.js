@@ -36,7 +36,7 @@ class FirebaseAuth {
 
     async init() {
         console.log('🔄 Firebase Auth init() started...');
-        console.log('📋 Version check: firebase-auth.js v4.0 (popup-based auth)');
+        console.log('📋 Version check: firebase-auth.js v5.0 (persistent auth)');
         
         // Wait for Firebase to be initialized
         let waitCount = 0;
@@ -51,12 +51,20 @@ class FirebaseAuth {
         this.auth = window.firebaseAuth;
         console.log('✅ Firebase Auth initialized, auth object:', this.auth);
         
-        // Set up auth state listener FIRST
+        // Check if there's already a current user (restored from persistence)
+        // This can happen if Firebase already restored the session from IndexedDB
+        if (this.auth.currentUser) {
+            console.log('✅ Found existing user from persistence:', this.auth.currentUser.email);
+            this.user = this.auth.currentUser;
+            this._setAuthReady(this.auth.currentUser);
+        }
+        
+        // Set up auth state listener
         console.log('🔄 Setting up auth state listener...');
         
         // Create a promise that resolves when we get the first auth state
         const firstAuthState = new Promise((resolve) => {
-            const unsubscribe = this.auth.onAuthStateChanged((user) => {
+            this.auth.onAuthStateChanged((user) => {
                 console.log('🔔 Firebase auth state changed:', user ? `user: ${user.email}, uid: ${user.uid}` : 'signed out');
                 this.user = user;
                 
@@ -92,14 +100,17 @@ class FirebaseAuth {
             console.error('❌ Error checking redirect result:', error.message);
         }
         
-        // Wait for first auth state (with timeout)
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
-        await Promise.race([firstAuthState, timeoutPromise]);
-        
-        // If still not ready, set it now
+        // If not already ready, wait for first auth state (with longer timeout for slow connections)
         if (!this.authReady) {
-            console.log('⏰ Timeout waiting for auth state, using currentUser');
-            this._setAuthReady(this.auth.currentUser);
+            console.log('🔄 Waiting for auth state from persistence...');
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
+            await Promise.race([firstAuthState, timeoutPromise]);
+            
+            // If still not ready, set it now
+            if (!this.authReady) {
+                console.log('⏰ Timeout waiting for auth state, using currentUser:', this.auth.currentUser?.email || 'null');
+                this._setAuthReady(this.auth.currentUser);
+            }
         }
         
         console.log('✅ Firebase Auth init() completed, authReady:', this.authReady, 'user:', this.user?.email);

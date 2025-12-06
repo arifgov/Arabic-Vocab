@@ -276,8 +276,10 @@ class VocabTrainer {
                             mastered: false,
                             english_arabic_correct: false,
                             arabic_english_correct: false,
+                            mixed_correct: false,
                             session_english_arabic: false,
-                            session_arabic_english: false
+                            session_arabic_english: false,
+                            session_mixed: false
                         };
                         initialized = true;
                     }
@@ -359,12 +361,14 @@ class VocabTrainer {
             incorrect_count: 0,
             consecutive_correct: 0,
             mastered: false,
-            // Track both directions separately
+            // Track all three modes separately
             english_arabic_correct: false,  // Correct in English→Arabic mode
             arabic_english_correct: false,  // Correct in Arabic→English mode
+            mixed_correct: false,           // Correct in Mixed mode
             // Session tracking for "in one go" mastery
             session_english_arabic: false,
-            session_arabic_english: false
+            session_arabic_english: false,
+            session_mixed: false
         };
     }
     
@@ -435,8 +439,10 @@ class VocabTrainer {
                         mastered: false,
                         english_arabic_correct: false,
                         arabic_english_correct: false,
+                        mixed_correct: false,
                         session_english_arabic: false,
-                        session_arabic_english: false
+                        session_arabic_english: false,
+                        session_mixed: false
                     });
                 });
                 this.setLessonStatus(book, lesson, { 
@@ -453,8 +459,8 @@ class VocabTrainer {
     isWordMastered(id) {
         // Always get fresh data
         const wp = this.getWordProgress(id);
-        // Word is mastered if both directions are correct (in one go)
-        return wp.mastered || (wp.english_arabic_correct && wp.arabic_english_correct);
+        // Word is mastered if all three modes are correct
+        return wp.mastered || (wp.english_arabic_correct && wp.arabic_english_correct && wp.mixed_correct);
     }
     
     updateWordMastery(id, mode, isCorrect) {
@@ -485,13 +491,20 @@ class VocabTrainer {
                     wp.mastered = false;
                 }
             }
+        } else if (mode === 'mixed') {
+            wp.session_mixed = isCorrect;
+            if (isCorrect) {
+                wp.mixed_correct = true;
+            } else {
+                wp.mixed_correct = false;
+            }
         }
         
-        // Check if mastered (both directions correct)
-        // A word is mastered when you've answered it correctly in BOTH directions
-        if (wp.english_arabic_correct && wp.arabic_english_correct && !wp.mastered) {
+        // Check if mastered (all three modes correct)
+        // A word is mastered when you've answered it correctly in ALL three modes
+        if (wp.english_arabic_correct && wp.arabic_english_correct && wp.mixed_correct && !wp.mastered) {
             wp.mastered = true;
-            console.log(`✅ Word ${id} mastered! Both directions correct.`);
+            console.log(`✅ Word ${id} mastered! All three modes correct.`);
         }
         
         this.setWordProgress(id, wp);
@@ -742,10 +755,11 @@ class VocabTrainer {
             lessonData.items.forEach(item => {
                 const wp = this.getWordProgress(item.id);
                 // Reset only temporary session tracking flags
-                // DO NOT reset english_arabic_correct or arabic_english_correct - these track
+                // DO NOT reset english_arabic_correct, arabic_english_correct, or mixed_correct - these track
                 // permanent progress across sessions and should only be reset when a mistake is made
                 wp.session_english_arabic = false;
                 wp.session_arabic_english = false;
+                wp.session_mixed = false;
                 this.setWordProgress(item.id, wp);
             });
         }
@@ -973,8 +987,8 @@ class VocabTrainer {
                     completed++;
                 }
             } else if (mode === 'mixed') {
-                // Completed if both directions are correct (mastered)
-                if (wp.english_arabic_correct && wp.arabic_english_correct) {
+                // Completed if mixed_correct is true (independent tracking)
+                if (wp.mixed_correct) {
                     completed++;
                 }
             }
