@@ -226,17 +226,59 @@ class VocabTrainer {
     }
     
     mergeProgress(local, server) {
-        // Merge strategy: server wins for conflicts
+        // Merge strategy: preserve progress (true values win over false)
         const merged = {
-            wordProgress: { ...local.wordProgress, ...server.wordProgress },
-            lessonStatus: {
-                1: { ...local.lessonStatus?.[1], ...server.lessonStatus?.[1] },
-                2: { ...local.lessonStatus?.[2], ...server.lessonStatus?.[2] }
-            },
+            wordProgress: {},
+            lessonStatus: { 1: {}, 2: {} },
             lastBook: server.lastBook || local.lastBook,
             lastLesson: server.lastLesson || local.lastLesson,
             lastMode: server.lastMode || local.lastMode
         };
+        
+        // Merge word progress - true values win
+        const allWordIds = new Set([
+            ...Object.keys(local.wordProgress || {}),
+            ...Object.keys(server.wordProgress || {})
+        ]);
+        
+        allWordIds.forEach(id => {
+            const localWp = local.wordProgress?.[id] || {};
+            const serverWp = server.wordProgress?.[id] || {};
+            merged.wordProgress[id] = {
+                correct_count: Math.max(localWp.correct_count || 0, serverWp.correct_count || 0),
+                incorrect_count: Math.max(localWp.incorrect_count || 0, serverWp.incorrect_count || 0),
+                consecutive_correct: Math.max(localWp.consecutive_correct || 0, serverWp.consecutive_correct || 0),
+                mastered: localWp.mastered || serverWp.mastered || false,
+                english_arabic_correct: localWp.english_arabic_correct || serverWp.english_arabic_correct || false,
+                arabic_english_correct: localWp.arabic_english_correct || serverWp.arabic_english_correct || false,
+                mixed_correct: localWp.mixed_correct || serverWp.mixed_correct || false,
+                session_english_arabic: localWp.session_english_arabic || false,
+                session_arabic_english: localWp.session_arabic_english || false,
+                session_mixed: localWp.session_mixed || false
+            };
+        });
+        
+        // Merge lesson status - final_test_passed true wins
+        for (const book of [1, 2]) {
+            const localLessons = local.lessonStatus?.[book] || {};
+            const serverLessons = server.lessonStatus?.[book] || {};
+            const allLessons = new Set([
+                ...Object.keys(localLessons),
+                ...Object.keys(serverLessons)
+            ]);
+            
+            allLessons.forEach(lesson => {
+                const localStatus = localLessons[lesson] || {};
+                const serverStatus = serverLessons[lesson] || {};
+                merged.lessonStatus[book][lesson] = {
+                    mastered: localStatus.mastered || serverStatus.mastered || false,
+                    final_test_passed: localStatus.final_test_passed || serverStatus.final_test_passed || false,
+                    date_completed: localStatus.date_completed || serverStatus.date_completed || null
+                };
+            });
+        }
+        
+        console.log('🔀 Merged progress - preserving all true values');
         return merged;
     }
     
@@ -476,7 +518,7 @@ class VocabTrainer {
             if (isCorrect) {
                 wp.english_arabic_correct = true;
             } else {
-                // Only reset English-Arabic, not Arabic-English if it's already correct
+                // English-Arabic is STRICT: reset progress on wrong answer
                 wp.english_arabic_correct = false;
                 // Only reset mastered status if it was previously mastered
                 if (wp.mastered) {
@@ -487,21 +529,17 @@ class VocabTrainer {
             wp.session_arabic_english = isCorrect;
             if (isCorrect) {
                 wp.arabic_english_correct = true;
-            } else {
-                // Only reset Arabic-English, not English-Arabic if it's already correct
-                wp.arabic_english_correct = false;
-                // Only reset mastered status if it was previously mastered
-                if (wp.mastered) {
-                    wp.mastered = false;
-                }
             }
+            // Arabic-English is LENIENT: wrong answers don't reset progress
+            // The word will still appear in weak words list and can be practiced again
+            // but progress bar won't go backwards
         } else if (mode === 'mixed') {
             wp.session_mixed = isCorrect;
             if (isCorrect) {
                 wp.mixed_correct = true;
-            } else {
-                wp.mixed_correct = false;
             }
+            // Mixed mode is LENIENT: wrong answers don't reset progress
+            // The word will still appear in weak words list and can be practiced again
         }
         
         // Check if mastered (all three modes correct)
@@ -538,10 +576,19 @@ class VocabTrainer {
     }
     
     passFinalTest(book, lesson) {
+        console.log(`🎯 Passing final test for Book ${book}, Lesson ${lesson}`);
         this.setLessonStatus(book, lesson, {
             final_test_passed: true,
             date_completed: new Date().toISOString().split('T')[0]
         });
+        // Immediately reload progress to ensure it's in memory
+        this.progress = this.loadProgress();
+        console.log(`✅ Final test passed status saved:`, this.getLessonStatus(book, lesson));
+        
+        // Force sync to Firebase
+        if (window.firebaseSyncManager?.syncEnabled) {
+            window.firebaseSyncManager.forceSync();
+        }
     }
     
     isLessonUnlocked(book, lesson) {
@@ -1237,6 +1284,95 @@ class VocabTrainer {
         });
     }
     
+    // Lenient answer checking with fuzzy matching
+    checkAnswerLenient(userAnswer, correctAnswer) {
+        // Normalize both answers
+        const normalizeText = (text) => {
+            let normalized = text.toLowerCase().trim();
+            
+            // Remove all punctuation (including question marks, parentheses, etc.)
+            normalized = normalized.replace(/[.,;:!?()[\]{}'"]/g, '');
+            
+            // Normalize gender markers - expand abbreviations
+            normalized = normalized
+                .replace(/\b(m)\b/g, 'masculine')
+                .replace(/\bmasc\b/g, 'masculine')
+                .replace(/\b(f)\b/g, 'feminine')
+                .replace(/\bfem\b/g, 'feminine');
+            
+            // Normalize whitespace (collapse multiple spaces, trim)
+            normalized = normalized.replace(/\s+/g, ' ').trim();
+            
+            return normalized;
+        };
+        
+        const normalizedUser = normalizeText(userAnswer);
+        const normalizedCorrect = normalizeText(correctAnswer);
+        
+        // Exact match after normalization
+        if (normalizedUser === normalizedCorrect) {
+            return true;
+        }
+        
+        // Check if user answer contains the core meaning (without gender markers)
+        const coreCorrect = normalizedCorrect
+            .replace(/masculine/g, '')
+            .replace(/feminine/g, '')
+            .trim();
+        const coreUser = normalizedUser
+            .replace(/masculine/g, '')
+            .replace(/feminine/g, '')
+            .trim();
+        
+        if (coreUser === coreCorrect) {
+            return true;
+        }
+        
+        // Fuzzy match using Levenshtein distance
+        // Allow up to 2 character differences for short words, more for longer words
+        const maxDistance = Math.max(2, Math.floor(normalizedCorrect.length * 0.25));
+        const distance = this.levenshteinDistance(normalizedUser, normalizedCorrect);
+        
+        if (distance <= maxDistance) {
+            return true;
+        }
+        
+        // Also check against core answer (without gender) with fuzzy matching
+        const coreDistance = this.levenshteinDistance(coreUser, coreCorrect);
+        if (coreDistance <= maxDistance) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // Levenshtein distance algorithm for fuzzy matching
+    levenshteinDistance(str1, str2) {
+        const m = str1.length;
+        const n = str2.length;
+        
+        // Create matrix
+        const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+        
+        // Initialize first column and row
+        for (let i = 0; i <= m; i++) dp[i][0] = i;
+        for (let j = 0; j <= n; j++) dp[0][j] = j;
+        
+        // Fill the matrix
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                dp[i][j] = Math.min(
+                    dp[i - 1][j] + 1,      // deletion
+                    dp[i][j - 1] + 1,      // insertion
+                    dp[i - 1][j - 1] + cost // substitution
+                );
+            }
+        }
+        
+        return dp[m][n];
+    }
+    
     checkAnswer() {
         const feedbackEl = document.getElementById('feedback');
         const checkBtn = document.getElementById('check-btn');
@@ -1265,15 +1401,11 @@ class VocabTrainer {
                 }
             });
         } else if (actualMode === 'arabic-english') {
-            // Typing mode
-            const userAnswer = document.getElementById('answer-input').value.trim().toLowerCase();
-            const correctAnswer = this.currentQuestion.english.toLowerCase();
+            // Typing mode with lenient matching
+            const userAnswer = document.getElementById('answer-input').value.trim();
+            const correctAnswer = this.currentQuestion.english;
             
-            // Normalize comparison
-            const normalizedUser = userAnswer.replace(/[.,;:!?]/g, '').trim();
-            const normalizedCorrect = correctAnswer.replace(/[.,;:!?]/g, '').trim();
-            
-            isCorrect = normalizedUser === normalizedCorrect;
+            isCorrect = this.checkAnswerLenient(userAnswer, correctAnswer);
         }
         
         // Update progress
@@ -1308,8 +1440,10 @@ class VocabTrainer {
         // Save updated progress (this also syncs to Firebase)
         this.setWordProgress(this.currentQuestion.id, updatedProgress);
         
-        // Update mastery with actual mode information (actualMode already declared above)
-        this.updateWordMastery(this.currentQuestion.id, actualMode, isCorrect);
+        // Update mastery - use currentMode (not actualMode) so mixed mode tracks independently
+        // actualMode is the UI mode (english-arabic or arabic-english randomly chosen for mixed)
+        // but we want to track progress for the mode the user selected (mixed)
+        this.updateWordMastery(this.currentQuestion.id, this.currentMode, isCorrect);
         
         // Save session state after each answer (for resume functionality)
         this.saveSessionState();
@@ -1319,14 +1453,28 @@ class VocabTrainer {
             // Lesson is ready for final test, but not yet mastered until test is passed
         }
         
-        // Show correct answer
+        // Show correct answer with additional info
         const correctAnswerDiv = document.createElement('div');
         correctAnswerDiv.className = 'correct-answer';
-        correctAnswerDiv.innerHTML = `
-            <div><strong>${this.currentQuestion.english}</strong></div>
-            <div class="arabic-text">${this.currentQuestion.arabic}</div>
-            <!-- <div class="transliteration">${this.currentQuestion.transliteration}</div> -->
-        `;
+        
+        // Build the answer display
+        let answerHTML = `<div><strong>${this.currentQuestion.english}</strong></div>`;
+        answerHTML += `<div class="arabic-text">${this.currentQuestion.arabic}</div>`;
+        
+        // Show plural if available
+        if (this.currentQuestion.plural) {
+            answerHTML += `<div class="plural-info">Plural: <span class="arabic-text">${this.currentQuestion.plural}</span></div>`;
+        }
+        
+        // If user got it wrong in typing mode, show what they typed
+        if (!isCorrect && actualMode === 'arabic-english') {
+            const userTyped = document.getElementById('answer-input').value.trim();
+            if (userTyped) {
+                answerHTML += `<div class="user-answer">You typed: "${userTyped}"</div>`;
+            }
+        }
+        
+        correctAnswerDiv.innerHTML = answerHTML;
         feedbackEl.appendChild(correctAnswerDiv);
         
         checkBtn.style.display = 'none';
@@ -1513,6 +1661,19 @@ class VocabTrainer {
         });
         
         document.getElementById('back-to-lesson-summary').addEventListener('click', async () => {
+            // Save session state before leaving
+            this.saveSessionState();
+            // Force sync to Firebase before leaving
+            if (window.firebaseSyncManager?.syncEnabled) {
+                await window.firebaseSyncManager.forceSync();
+            }
+            // Reload progress to ensure we have latest data
+            this.progress = this.loadProgress();
+            this.showLessonView(this.currentBook, this.currentLesson);
+        });
+        
+        // Back to Lesson button in summary actions
+        document.getElementById('back-to-lesson-btn').addEventListener('click', async () => {
             // Save session state before leaving
             this.saveSessionState();
             // Force sync to Firebase before leaving

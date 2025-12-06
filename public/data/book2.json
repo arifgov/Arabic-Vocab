@@ -26,7 +26,8 @@
         "id": "b2_l1_004",
         "english": "Manner",
         "arabic": "ذوات",
-        "transliteration": "dhwat"
+        "transliteration": "dhwat",
+        "plural": "أخلاق"
       },
       {
         "id": "b2_l1_005",
@@ -80,19 +81,22 @@
         "id": "b2_l1_013",
         "english": "Hundred",
         "arabic": "مائة",
-        "transliteration": "mayah"
+        "transliteration": "mayah",
+        "plural": "مئات"
       },
       {
         "id": "b2_l1_014",
         "english": "Thousand",
         "arabic": "ألف",
-        "transliteration": "alf"
+        "transliteration": "alf",
+        "plural": "آلاف"
       },
       {
         "id": "b2_l1_015",
         "english": "Rupee",
         "arabic": "روبية",
-        "transliteration": "rwbyah"
+        "transliteration": "rwbyah",
+        "plural": "روبيات"
       },
       {
         "id": "b2_l1_016",
@@ -146,7 +150,8 @@
         "id": "b2_l1_024",
         "english": "Jew",
         "arabic": "يهودى",
-        "transliteration": "yhwda"
+        "transliteration": "yhwda",
+        "plural": "يهود"
       },
       {
         "id": "b2_l1_025",
@@ -170,7 +175,8 @@
         "id": "b2_l1_028",
         "english": "Paper",
         "arabic": "ورق",
-        "transliteration": "wrq"
+        "transliteration": "wrq",
+        "plural": "أوراق"
       },
       {
         "id": "b2_l1_029",
@@ -200,19 +206,22 @@
         "id": "b2_l1_033",
         "english": "Lawyer",
         "arabic": "محام",
-        "transliteration": "mham"
+        "transliteration": "mham",
+        "plural": "محامون"
       },
       {
         "id": "b2_l1_034",
         "english": "Judge",
         "arabic": "قاض",
-        "transliteration": "qad"
+        "transliteration": "qad",
+        "plural": "قضاة"
       },
       {
         "id": "b2_l1_035",
         "english": "Valley",
         "arabic": "واد",
-        "transliteration": "wad"
+        "transliteration": "wad",
+        "plural": "أودية"
       },
       {
         "id": "b2_l1_036",
@@ -356,7 +365,8 @@
         "id": "b2_l1_059",
         "english": "Television",
         "arabic": "تلفاز",
-        "transliteration": "tlfaz"
+        "transliteration": "tlfaz",
+        "plural": "تلفازات"
       },
       {
         "id": "b2_l1_060",
@@ -639,7 +649,8 @@
         "id": "b2_l2_029",
         "english": "River",
         "arabic": "جيد",
-        "transliteration": "jyd"
+        "transliteration": "jyd",
+        "plural": "أنهار"
       },
       {
         "id": "b2_l2_030",
@@ -868,7 +879,8 @@
         "id": "b2_l3_034",
         "english": "Team",
         "arabic": "فريق",
-        "transliteration": "fryq"
+        "transliteration": "fryq",
+        "plural": "فرق"
       },
       {
         "id": "b2_l3_035",
@@ -1032,7 +1044,8 @@
         "id": "b2_l5_001",
         "english": "Answer",
         "arabic": "جواب",
-        "transliteration": "jwab"
+        "transliteration": "jwab",
+        "plural": "أجوبة"
       },
       {
         "id": "b2_l5_002",
@@ -1044,7 +1057,8 @@
         "id": "b2_l5_003",
         "english": "Question",
         "arabic": "سؤال",
-        "transliteration": "swal"
+        "transliteration": "swal",
+        "plural": "أسئلة"
       },
       {
         "id": "b2_l5_004",
@@ -1056,7 +1070,8 @@
         "id": "b2_l5_005",
         "english": "Snake",
         "arabic": "حية",
-        "transliteration": "hyah"
+        "transliteration": "hyah",
+        "plural": "ثعابين"
       },
       {
         "id": "b2_l5_006",
@@ -1086,7 +1101,8 @@
         "id": "b2_l5_010",
         "english": "Shop",
         "arabic": "دكَّ ان",
-        "transliteration": "dkّa an"
+        "transliteration": "dkّa an",
+        "plural": "دكاكين"
       },
       {
         "id": "b2_l5_011",
@@ -1501,7 +1517,8 @@
         "id": "b2_l6_041",
         "english": "Month",
         "arabic": "سن",
-        "transliteration": "sn"
+        "transliteration": "sn",
+        "plural": "شهور"
       },
       {
         "id": "b2_l6_042",
@@ -1513,7 +1530,8 @@
         "id": "b2_l6_043",
         "english": "Player",
         "arabic": "شهور ، أشهر",
-        "transliteration": "shhwr ، ashhr"
+        "transliteration": "shhwr ، ashhr",
+        "plural": "لاعبون"
       },
       {
         "id": "b2_l6_044",
@@ -1531,7 +1549,8 @@
         "id": "b2_l6_046",
         "english": "Price",
         "arabic": "شهير",
-        "transliteration": "shhyr"
+        "transliteration": "shhyr",
+        "plural": "أسعار"
       },
       {
         "id": "b2_l6_047",
@@ -1615,7 +1634,8 @@
         "id": "b2_l6_060",
         "english": "Window",
         "arabic": "نافذة",
-        "transliteration": "nafdhah"
+        "transliteration": "nafdhah",
+        "plural": "نوافذ"
       },
       {
         "id": "b2_l6_061",
@@ -1856,7 +1876,8 @@
         "id": "b2_l7_031",
         "english": "Newspaper",
         "arabic": "صحيح",
-        "transliteration": "shyh"
+        "transliteration": "shyh",
+        "plural": "صحف"
       },
       {
         "id": "b2_l7_032",
@@ -2205,13 +2226,15 @@
         "id": "b2_l9_054",
         "english": "Sentence",
         "arabic": "جملة",
-        "transliteration": "jmlah"
+        "transliteration": "jmlah",
+        "plural": "جمل"
       },
       {
         "id": "b2_l9_055",
         "english": "Driver",
         "arabic": "ئقسا",
-        "transliteration": "yqsa"
+        "transliteration": "yqsa",
+        "plural": "سائقون"
       },
       {
         "id": "b2_l9_056",
@@ -2560,13 +2583,15 @@
         "id": "b2_l10_051",
         "english": "Office",
         "arabic": "مكتب",
-        "transliteration": "mktb"
+        "transliteration": "mktb",
+        "plural": "مكاتب"
       },
       {
         "id": "b2_l10_052",
         "english": "Factory",
         "arabic": "مصنع",
-        "transliteration": "msna"
+        "transliteration": "msna",
+        "plural": "مصانع"
       },
       {
         "id": "b2_l10_053",
@@ -2909,7 +2934,8 @@
         "id": "b2_l11_030",
         "english": "Station",
         "arabic": "حلاَّ قون",
-        "transliteration": "hlaّa qwn"
+        "transliteration": "hlaّa qwn",
+        "plural": "محطات"
       },
       {
         "id": "b2_l11_031",
@@ -2945,7 +2971,8 @@
         "id": "b2_l11_036",
         "english": "Letter",
         "arabic": "بطاقات",
-        "transliteration": "btaqat"
+        "transliteration": "btaqat",
+        "plural": "رسائل"
       },
       {
         "id": "b2_l11_037",
@@ -3180,7 +3207,8 @@
         "id": "b2_l12_037",
         "english": "Newspaper",
         "arabic": "صحيفة",
-        "transliteration": "shyfah"
+        "transliteration": "shyfah",
+        "plural": "صحف"
       }
     ]
   },
@@ -3278,7 +3306,8 @@
         "id": "b2_l14_009",
         "english": "News",
         "arabic": "أخبار",
-        "transliteration": "akhbar"
+        "transliteration": "akhbar",
+        "plural": "أخبار"
       },
       {
         "id": "b2_l14_010",
@@ -3404,7 +3433,8 @@
         "id": "b2_l14_030",
         "english": "Picture",
         "arabic": "صورة",
-        "transliteration": "swrah"
+        "transliteration": "swrah",
+        "plural": "صور"
       },
       {
         "id": "b2_l14_031",
@@ -3645,7 +3675,8 @@
         "id": "b2_l15_029",
         "english": "Knife",
         "arabic": "سكِّ ين",
-        "transliteration": "skّi yn"
+        "transliteration": "skّi yn",
+        "plural": "سكاكين"
       },
       {
         "id": "b2_l15_030",
@@ -3965,25 +3996,29 @@
         "id": "b2_l17_014",
         "english": "Spring",
         "arabic": "الربيع",
-        "transliteration": "alrbya"
+        "transliteration": "alrbya",
+        "plural": "ربيع"
       },
       {
         "id": "b2_l17_015",
         "english": "Summer",
         "arabic": "يفصال",
-        "transliteration": "yfsal"
+        "transliteration": "yfsal",
+        "plural": "صيف"
       },
       {
         "id": "b2_l17_016",
         "english": "Autumn",
         "arabic": "الخريف",
-        "transliteration": "alkhryf"
+        "transliteration": "alkhryf",
+        "plural": "خريف"
       },
       {
         "id": "b2_l17_017",
         "english": "Winter",
         "arabic": "الشتاءُ",
-        "transliteration": "alshta'u"
+        "transliteration": "alshta'u",
+        "plural": "شتاء"
       },
       {
         "id": "b2_l17_018",
@@ -4121,7 +4156,8 @@
         "id": "b2_l17_040",
         "english": "Fly",
         "arabic": "ضوضاءٌ",
-        "transliteration": "dwda'un"
+        "transliteration": "dwda'un",
+        "plural": "ذباب"
       },
       {
         "id": "b2_l17_041",
@@ -4254,7 +4290,8 @@
         "id": "b2_l18_008",
         "english": "Pencil",
         "arabic": "لقم الرصاص",
-        "transliteration": "lqm alrsas"
+        "transliteration": "lqm alrsas",
+        "plural": "أقلام رصاص"
       },
       {
         "id": "b2_l18_009",
@@ -4579,7 +4616,8 @@
         "id": "b2_l19_029",
         "english": "Year",
         "arabic": "عام",
-        "transliteration": "aam"
+        "transliteration": "aam",
+        "plural": "سنوات"
       },
       {
         "id": "b2_l19_030",
@@ -5121,7 +5159,8 @@
         "id": "b2_l21_042",
         "english": "Fruit",
         "arabic": "سلمى",
-        "transliteration": "slma"
+        "transliteration": "slma",
+        "plural": "فواكه"
       },
       {
         "id": "b2_l21_043",
@@ -5145,7 +5184,8 @@
         "id": "b2_l21_046",
         "english": "Flower",
         "arabic": "أمثلة",
-        "transliteration": "amthlah"
+        "transliteration": "amthlah",
+        "plural": "زهور"
       },
       {
         "id": "b2_l21_047",
@@ -5224,7 +5264,8 @@
         "id": "b2_l22_010",
         "english": "Year",
         "arabic": "سنة",
-        "transliteration": "snah"
+        "transliteration": "snah",
+        "plural": "سنوات"
       },
       {
         "id": "b2_l22_011",
@@ -5459,13 +5500,15 @@
         "id": "b2_l23_021",
         "english": "Meeting",
         "arabic": "إجتماع",
-        "transliteration": "ijtmaa"
+        "transliteration": "ijtmaa",
+        "plural": "اجتماعات"
       },
       {
         "id": "b2_l23_022",
         "english": "Story",
         "arabic": "قصة",
-        "transliteration": "qsah"
+        "transliteration": "qsah",
+        "plural": "قصص"
       },
       {
         "id": "b2_l23_023",
@@ -6284,7 +6327,8 @@
         "id": "b2_l26_014",
         "english": "Voice",
         "arabic": "قد",
-        "transliteration": "qd"
+        "transliteration": "qd",
+        "plural": "أصوات"
       },
       {
         "id": "b2_l26_015",
@@ -6350,7 +6394,8 @@
         "id": "b2_l26_025",
         "english": "Shoe",
         "arabic": "حذاءٌ",
-        "transliteration": "hdha'un"
+        "transliteration": "hdha'un",
+        "plural": "أحذية"
       },
       {
         "id": "b2_l26_026",
@@ -6380,7 +6425,8 @@
         "id": "b2_l26_030",
         "english": "Glass",
         "arabic": "كوب",
-        "transliteration": "kwb"
+        "transliteration": "kwb",
+        "plural": "أكواب"
       },
       {
         "id": "b2_l26_031",
@@ -7035,7 +7081,8 @@
         "id": "b2_l27_058",
         "english": "Egg",
         "arabic": "بيضة",
-        "transliteration": "bydah"
+        "transliteration": "bydah",
+        "plural": "بيض"
       },
       {
         "id": "b2_l27_059",
@@ -7047,7 +7094,8 @@
         "id": "b2_l27_060",
         "english": "Forest",
         "arabic": "غابة",
-        "transliteration": "ghabah"
+        "transliteration": "ghabah",
+        "plural": "غابات"
       },
       {
         "id": "b2_l27_061",
@@ -7059,7 +7107,8 @@
         "id": "b2_l27_062",
         "english": "Train",
         "arabic": "قطار",
-        "transliteration": "qtar"
+        "transliteration": "qtar",
+        "plural": "قطارات"
       },
       {
         "id": "b2_l27_063",
@@ -7101,7 +7150,8 @@
         "id": "b2_l27_069",
         "english": "Lion",
         "arabic": "اسد",
-        "transliteration": "asd"
+        "transliteration": "asd",
+        "plural": "أسود"
       },
       {
         "id": "b2_l27_070",
@@ -7480,13 +7530,15 @@
         "id": "b2_l28_041",
         "english": "Night",
         "arabic": "دار",
-        "transliteration": "dar"
+        "transliteration": "dar",
+        "plural": "ليال"
       },
       {
         "id": "b2_l28_042",
         "english": "Day",
         "arabic": "ليل",
-        "transliteration": "lyl"
+        "transliteration": "lyl",
+        "plural": "أيام"
       },
       {
         "id": "b2_l28_043",
@@ -7498,7 +7550,8 @@
         "id": "b2_l28_044",
         "english": "Gift",
         "arabic": "تراب",
-        "transliteration": "trab"
+        "transliteration": "trab",
+        "plural": "هدايا"
       },
       {
         "id": "b2_l28_045",
@@ -8046,7 +8099,8 @@
         "id": "b2_l30_011",
         "english": "News",
         "arabic": "خبر",
-        "transliteration": "khbr"
+        "transliteration": "khbr",
+        "plural": "أخبار"
       },
       {
         "id": "b2_l30_012",
@@ -8148,7 +8202,8 @@
         "id": "b2_l30_028",
         "english": "Picture",
         "arabic": "يقض",
-        "transliteration": "yqd"
+        "transliteration": "yqd",
+        "plural": "صور"
       },
       {
         "id": "b2_l30_029",
