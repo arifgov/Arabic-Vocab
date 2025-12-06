@@ -171,12 +171,16 @@ class VocabTrainer {
     }
     
     showLoginView() {
-        document.getElementById('login-view').style.display = 'flex';
+        const loginView = document.getElementById('login-view');
+        loginView.style.display = 'flex';
+        loginView.style.pointerEvents = 'auto';
         document.getElementById('app').style.display = 'none';
     }
     
     hideLoginView() {
-        document.getElementById('login-view').style.display = 'none';
+        const loginView = document.getElementById('login-view');
+        loginView.style.display = 'none';
+        loginView.style.pointerEvents = 'none';
         document.getElementById('app').style.display = 'block';
     }
     
@@ -1449,10 +1453,30 @@ class VocabTrainer {
         }
         
         // Navigation home button
-        document.getElementById('nav-home-btn').addEventListener('click', async () => {
-            await this.showDashboard();
-            this.updateGlobalStats();
-        });
+        const homeBtn = document.getElementById('nav-home-btn');
+        if (homeBtn) {
+            homeBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🏠 Home button clicked');
+                await this.showDashboard();
+                this.updateGlobalStats();
+            });
+        } else {
+            console.error('❌ nav-home-btn not found!');
+        }
+        
+        // Also make the nav brand clickable as home (common UX pattern)
+        const navBrand = document.querySelector('.nav-brand');
+        if (navBrand) {
+            navBrand.style.cursor = 'pointer';
+            navBrand.addEventListener('click', async (e) => {
+                e.preventDefault();
+                console.log('🏠 Nav brand clicked');
+                await this.showDashboard();
+                this.updateGlobalStats();
+            });
+        }
         
         // Book selector
         document.querySelectorAll('.book-btn').forEach(btn => {
