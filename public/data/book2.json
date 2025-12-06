@@ -6,19 +6,19 @@
     "items": [
       {
         "id": "b2_l1_001",
-        "english": "Possess (m,pl)",
+        "english": "Possess (m, pl)",
         "arabic": "ذو",
         "transliteration": "dhw"
       },
       {
         "id": "b2_l1_002",
-        "english": "Possess (f,sing)",
+        "english": "Possess (f, sing)",
         "arabic": "ذوو",
         "transliteration": "dhww"
       },
       {
         "id": "b2_l1_003",
-        "english": "Possess (f,pl)",
+        "english": "Possess (f, pl)",
         "arabic": "ذات",
         "transliteration": "dhat"
       },
@@ -115,7 +115,7 @@
       {
         "id": "b2_l1_019",
         "english": "Intelligent (pl)",
-        "arabic": "ذأ  كياءُ",
+        "arabic": "ذأ كياءُ",
         "transliteration": "dha kya'u"
       },
       {
@@ -163,7 +163,7 @@
       {
         "id": "b2_l1_027",
         "english": "Unmarried",
-        "arabic": "عأ  زاب",
+        "arabic": "عأ زاب",
         "transliteration": "aa zab"
       },
       {
@@ -246,7 +246,7 @@
       },
       {
         "id": "b2_l1_041",
-        "english": "(m,pl)",
+        "english": "(m, pl)",
         "arabic": "إنهم",
         "transliteration": "inhm"
       },
@@ -258,7 +258,7 @@
       },
       {
         "id": "b2_l1_043",
-        "english": "(f,pl)",
+        "english": "(f, pl)",
         "arabic": "إنهن",
         "transliteration": "inhn"
       },
@@ -270,7 +270,7 @@
       },
       {
         "id": "b2_l1_045",
-        "english": "(m,pl)",
+        "english": "(m, pl)",
         "arabic": "إنكم",
         "transliteration": "inkm"
       },
@@ -282,7 +282,7 @@
       },
       {
         "id": "b2_l1_047",
-        "english": "(f,pl)",
+        "english": "(f, pl)",
         "arabic": "إنكن",
         "transliteration": "inkn"
       },
@@ -620,13 +620,13 @@
       {
         "id": "b2_l2_026",
         "english": "meet you",
-        "arabic": "أنا  مسرور",
+        "arabic": "أنا مسرور",
         "transliteration": "ana msrwr"
       },
       {
         "id": "b2_l2_027",
         "english": "Its origin",
-        "arabic": "بلق  ائك",
+        "arabic": "بلق ائك",
         "transliteration": "blq ayk"
       },
       {
@@ -794,13 +794,13 @@
       },
       {
         "id": "b2_l3_022",
-        "english": "As if they (m,pl)",
+        "english": "As if they (m, pl)",
         "arabic": "اكأنه",
         "transliteration": "akanh"
       },
       {
         "id": "b2_l3_023",
-        "english": "As if they (f,pl)",
+        "english": "As if they (f, pl)",
         "arabic": "كأنهم",
         "transliteration": "kanhm"
       },
@@ -812,13 +812,13 @@
       },
       {
         "id": "b2_l3_025",
-        "english": "(m,sing.)",
+        "english": "(m, sing.)",
         "arabic": "كأنك",
         "transliteration": "kank"
       },
       {
         "id": "b2_l3_026",
-        "english": "As if you (f,sing.)",
+        "english": "As if you (f, sing.)",
         "arabic": "كأنك",
         "transliteration": "kank"
       },
@@ -915,7 +915,7 @@
       },
       {
         "id": "b2_l4_004",
-        "english": "(m,sing.)",
+        "english": "(m, sing.)",
         "arabic": "لأَنك",
         "transliteration": "laank"
       },
@@ -969,8 +969,8 @@
       },
       {
         "id": "b2_l4_013",
-        "english": "(m,pl)",
-        "arabic": "ذهب  وا",
+        "english": "(m, pl)",
+        "arabic": "ذهب وا",
         "transliteration": "dhhb wa"
       },
       {
@@ -981,32 +981,32 @@
       },
       {
         "id": "b2_l4_015",
-        "english": "They went (f,pl)",
+        "english": "They went (f, pl)",
         "arabic": "ذهبن",
         "transliteration": "dhhbn"
       },
       {
         "id": "b2_l4_016",
-        "english": "(m,sing.)",
+        "english": "(m, sing.)",
         "arabic": "ذهبت",
         "transliteration": "dhhbt"
       },
       {
         "id": "b2_l4_017",
-        "english": "You went  (m,pl)",
+        "english": "You went (m, pl)",
         "arabic": "ذهبمت",
         "transliteration": "dhhbmt"
       },
       {
         "id": "b2_l4_018",
-        "english": "(f,sing.)",
+        "english": "(f, sing.)",
         "arabic": "ذهبت",
         "transliteration": "dhhbt"
       },
       {
         "id": "b2_l4_019",
-        "english": "You went (f,pl)",
-        "arabic": "ذهب  تن",
+        "english": "You went (f, pl)",
+        "arabic": "ذهب تن",
         "transliteration": "dhhb tn"
       },
       {
@@ -1037,7 +1037,7 @@
       {
         "id": "b2_l5_002",
         "english": "Answers",
-        "arabic": "أج  وبة",
+        "arabic": "أج وبة",
         "transliteration": "aj wbah"
       },
       {
@@ -1259,13 +1259,13 @@
     "items": [
       {
         "id": "b2_l6_001",
-        "english": "Eleven  students",
-        "arabic": "أحد عشر      طالبا",
+        "english": "Eleven students",
+        "arabic": "أحد عشر طالبا",
         "transliteration": "ahd ashr talba"
       },
       {
         "id": "b2_l6_002",
-        "english": "Twelve  students",
+        "english": "Twelve students",
         "arabic": "اثنا عشر طالبا",
         "transliteration": "athna ashr talba"
       },
@@ -1283,13 +1283,13 @@
       },
       {
         "id": "b2_l6_005",
-        "english": "Fifteen  students",
+        "english": "Fifteen students",
         "arabic": "خمسة عشر طالبا",
         "transliteration": "khmsah ashr talba"
       },
       {
         "id": "b2_l6_006",
-        "english": "Sixteen  students",
+        "english": "Sixteen students",
         "arabic": "ستة عشر طالبا",
         "transliteration": "stah ashr talba"
       },
@@ -1344,7 +1344,7 @@
       {
         "id": "b2_l6_015",
         "english": "Fifth (m)",
-        "arabic": "ال  خامس",
+        "arabic": "ال خامس",
         "transliteration": "al khams"
       },
       {
@@ -1524,7 +1524,7 @@
       {
         "id": "b2_l6_045",
         "english": "Famous",
-        "arabic": "لا  عبون",
+        "arabic": "لا عبون",
         "transliteration": "la abwn"
       },
       {
@@ -1535,13 +1535,13 @@
       },
       {
         "id": "b2_l6_047",
-        "english": "Lazy (m,sl)",
+        "english": "Lazy (m, sl)",
         "arabic": "ثمن",
         "transliteration": "thmn"
       },
       {
         "id": "b2_l6_048",
-        "english": "Lazy (f,sl)",
+        "english": "Lazy (f, sl)",
         "arabic": "لانسك",
         "transliteration": "lansk"
       },
@@ -1656,13 +1656,13 @@
       {
         "id": "b2_l6_067",
         "english": "students",
-        "arabic": "تسع     عشرة طالبة",
+        "arabic": "تسع عشرة طالبة",
         "transliteration": "tsa ashrah talbah"
       },
       {
         "id": "b2_l6_068",
         "english": "Twenty students",
-        "arabic": "عشرون     طالبة",
+        "arabic": "عشرون طالبة",
         "transliteration": "ashrwn talbah"
       }
     ]
@@ -1765,7 +1765,7 @@
       {
         "id": "b2_l7_016",
         "english": "Sign of plural",
-        "arabic": "علامة التأ    نيث",
+        "arabic": "علامة التأ نيث",
         "transliteration": "alamah alta nyth"
       },
       {
@@ -1886,7 +1886,7 @@
       {
         "id": "b2_l9_001",
         "english": "List",
-        "arabic": "قا  ئمة",
+        "arabic": "قا ئمة",
         "transliteration": "qa ymah"
       },
       {
@@ -1946,7 +1946,7 @@
       {
         "id": "b2_l9_011",
         "english": "Capital City",
-        "arabic": "كلَّ  شيٍء",
+        "arabic": "كلَّ شيٍء",
         "transliteration": "klّa shyin'"
       },
       {
@@ -2216,7 +2216,7 @@
       {
         "id": "b2_l9_056",
         "english": "kabah",
-        "arabic": "يا ر  ب الكعبة",
+        "arabic": "يا ر ب الكعبة",
         "transliteration": "ya r b alkabah"
       },
       {
@@ -2474,7 +2474,7 @@
       },
       {
         "id": "b2_l10_037",
-        "english": "He hit  (i-a)",
+        "english": "He hit (i-a)",
         "arabic": "ضرب",
         "transliteration": "drb"
       },
@@ -3052,7 +3052,7 @@
       },
       {
         "id": "b2_l12_016",
-        "english": "Who (f,pl)",
+        "english": "Who (f, pl)",
         "arabic": "اللاَّ تي",
         "transliteration": "allaّa ty"
       },
@@ -3166,7 +3166,7 @@
       },
       {
         "id": "b2_l12_035",
-        "english": "Pupil (f,pl)",
+        "english": "Pupil (f, pl)",
         "arabic": "تلميذات",
         "transliteration": "tlmydhat"
       },
@@ -3192,7 +3192,7 @@
       {
         "id": "b2_l13_001",
         "english": "Taxi",
-        "arabic": "سيارة الأُ    جرة",
+        "arabic": "سيارة الأُ جرة",
         "transliteration": "syarah alau jrah"
       },
       {
@@ -3283,7 +3283,7 @@
       {
         "id": "b2_l14_010",
         "english": "O my sons",
-        "arabic": "بأيا   نائي",
+        "arabic": "بأيا نائي",
         "transliteration": "baya nayy"
       },
       {
@@ -3319,13 +3319,13 @@
       {
         "id": "b2_l14_016",
         "english": "The ta just as",
-        "arabic": "التاءُك    ما في",
+        "arabic": "التاءُك ما في",
         "transliteration": "alta'uk ma fy"
       },
       {
         "id": "b2_l14_017",
         "english": "The waw just as",
-        "arabic": "الواو ك    ما في",
+        "arabic": "الواو ك ما في",
         "transliteration": "alwaw k ma fy"
       },
       {
@@ -3337,7 +3337,7 @@
       {
         "id": "b2_l14_019",
         "english": "The naa just as",
-        "arabic": "نا ك  ما في",
+        "arabic": "نا ك ما في",
         "transliteration": "na k ma fy"
       },
       {
@@ -3554,7 +3554,7 @@
       {
         "id": "b2_l15_014",
         "english": "Only",
-        "arabic": "غ  ائب",
+        "arabic": "غ ائب",
         "transliteration": "gh ayb"
       },
       {
@@ -3572,12 +3572,12 @@
       {
         "id": "b2_l15_017",
         "english": "O my dear father",
-        "arabic": "في أثناءِ",
+        "arabic": "في أثناءٌ",
         "transliteration": "fy athna'i"
       },
       {
         "id": "b2_l15_018",
-        "english": "The negative \u0016",
+        "english": "The negative",
         "arabic": "يا أبت",
         "transliteration": "ya abt"
       },
@@ -3614,7 +3614,7 @@
       {
         "id": "b2_l15_024",
         "english": "Charity",
-        "arabic": "ص  دقات",
+        "arabic": "ص دقات",
         "transliteration": "s dqat"
       },
       {
@@ -3710,25 +3710,25 @@
       },
       {
         "id": "b2_l16_009",
-        "english": "You wanted (m,pl)",
+        "english": "You wanted (m, pl)",
         "arabic": "أردتم",
         "transliteration": "ardtm"
       },
       {
         "id": "b2_l16_010",
-        "english": "You want (m,pl)",
+        "english": "You want (m, pl)",
         "arabic": "تريدون",
         "transliteration": "trydwn"
       },
       {
         "id": "b2_l16_011",
-        "english": "You wanted (f,pl)",
+        "english": "You wanted (f, pl)",
         "arabic": "أردتن",
         "transliteration": "ardtn"
       },
       {
         "id": "b2_l16_012",
-        "english": "(f,pl)",
+        "english": "(f, pl)",
         "arabic": "تردن",
         "transliteration": "trdn"
       },
@@ -3940,7 +3940,7 @@
       {
         "id": "b2_l17_010",
         "english": "Calmly, quietly",
-        "arabic": "بهدوءٍ",
+        "arabic": "بهدوءٌ",
         "transliteration": "bhdw'in"
       },
       {
@@ -4131,7 +4131,7 @@
       },
       {
         "id": "b2_l17_042",
-        "english": "Other (m,pl)",
+        "english": "Other (m, pl)",
         "arabic": "ذبان",
         "transliteration": "dhban"
       },
@@ -4669,7 +4669,7 @@
       {
         "id": "b2_l20_004",
         "english": "Quarter to nine",
-        "arabic": "التاسعة إلاَّ  ربعا",
+        "arabic": "التاسعة إلاَّ ربعا",
         "transliteration": "altasaah ilaّa rbaa"
       },
       {
@@ -4807,7 +4807,7 @@
       {
         "id": "b2_l20_027",
         "english": "He pleases",
-        "arabic": "يرض  ي",
+        "arabic": "يرض ي",
         "transliteration": "yrd y"
       },
       {
@@ -4915,7 +4915,7 @@
       },
       {
         "id": "b2_l21_008",
-        "english": "You  said",
+        "english": "You said",
         "arabic": "قلت",
         "transliteration": "qlt"
       },
@@ -5241,7 +5241,7 @@
       {
         "id": "b2_l22_013",
         "english": "Clinic",
-        "arabic": "تمس  وصف",
+        "arabic": "تمس وصف",
         "transliteration": "tms wsf"
       },
       {
@@ -5265,13 +5265,13 @@
       {
         "id": "b2_l22_017",
         "english": "commerce",
-        "arabic": "كُلِّ ية    التجارة",
+        "arabic": "كُلِّ ية التجارة",
         "transliteration": "kulّi yah altjarah"
       },
       {
         "id": "b2_l22_018",
         "english": "protection",
-        "arabic": "في أمان اِ",
+        "arabic": "في أمان اٌ",
         "transliteration": "fy aman ai"
       },
       {
@@ -5313,13 +5313,13 @@
       {
         "id": "b2_l22_025",
         "english": "(language)",
-        "arabic": "فر  نسِية",
+        "arabic": "فر نسِية",
         "transliteration": "fr nsiyah"
       },
       {
         "id": "b2_l22_026",
         "english": "again",
-        "arabic": "إلى اللِّ قاءِ",
+        "arabic": "إلى اللِّ قاءٌ",
         "transliteration": "ila allّi qa'i"
       },
       {
@@ -5374,7 +5374,7 @@
       {
         "id": "b2_l23_007",
         "english": "Seventy",
-        "arabic": "سب  عون",
+        "arabic": "سب عون",
         "transliteration": "sb awn"
       },
       {
@@ -5596,7 +5596,7 @@
       {
         "id": "b2_l23_044",
         "english": "Nadawi",
-        "arabic": "الحسن  الندوي",
+        "arabic": "الحسن الندوي",
         "transliteration": "alhsn alndwy"
       },
       {
@@ -5681,7 +5681,7 @@
       {
         "id": "b2_l24_006",
         "english": "students (m)",
-        "arabic": "مائة و ستة  طلاَّ ب",
+        "arabic": "مائة و ستة طلاَّ ب",
         "transliteration": "mayah w stah tlaّa b"
       },
       {
@@ -5722,19 +5722,19 @@
       },
       {
         "id": "b2_l24_013",
-        "english": "students  (f)",
+        "english": "students (f)",
         "arabic": "مائة و ثلاثُ طالبات",
         "transliteration": "mayah w thlathu talbat"
       },
       {
         "id": "b2_l24_014",
-        "english": "students  (f)",
-        "arabic": "مائة وأَربع  طالبات",
+        "english": "students (f)",
+        "arabic": "مائة وأَربع طالبات",
         "transliteration": "mayah waarba talbat"
       },
       {
         "id": "b2_l24_015",
-        "english": "students  (f)",
+        "english": "students (f)",
         "arabic": "مائة و خمس طالبات",
         "transliteration": "mayah w khms talbat"
       },
@@ -5752,20 +5752,20 @@
       },
       {
         "id": "b2_l24_018",
-        "english": "students  (f)",
+        "english": "students (f)",
         "arabic": "مائة وثماني طالبات",
         "transliteration": "mayah wthmany talbat"
       },
       {
         "id": "b2_l24_019",
-        "english": "students  (f)",
+        "english": "students (f)",
         "arabic": "مائة وتسع طالبات",
         "transliteration": "mayah wtsa talbat"
       },
       {
         "id": "b2_l24_020",
         "english": "students (f)",
-        "arabic": "مائة وعشر  طالبات",
+        "arabic": "مائة وعشر طالبات",
         "transliteration": "mayah washr talbat"
       },
       {
@@ -5843,7 +5843,7 @@
       {
         "id": "b2_l24_033",
         "english": "thousand",
-        "arabic": "مئة ألف  طالبطالبة",
+        "arabic": "مئة ألف طالبطالبة",
         "transliteration": "myah alf talbtalbah"
       },
       {
@@ -5885,7 +5885,7 @@
       {
         "id": "b2_l24_040",
         "english": "thing numbered",
-        "arabic": "عك  س المعدود",
+        "arabic": "عك س المعدود",
         "transliteration": "ak s almadwd"
       },
       {
@@ -6168,7 +6168,7 @@
       {
         "id": "b2_l25_034",
         "english": "Stupid (pl)",
-        "arabic": "حمق   اءُ",
+        "arabic": "حمق اءُ",
         "transliteration": "hmq a'u"
       },
       {
@@ -6295,7 +6295,7 @@
       {
         "id": "b2_l26_016",
         "english": "Quadrilateral",
-        "arabic": "بالر  اعي",
+        "arabic": "بالر اعي",
         "transliteration": "balr aay"
       },
       {
@@ -6571,7 +6571,7 @@
       {
         "id": "b2_l26_062",
         "english": "Name of a verb",
-        "arabic": "و  إيابا",
+        "arabic": "و إيابا",
         "transliteration": "w iyaba"
       },
       {
@@ -6607,7 +6607,7 @@
       {
         "id": "b2_l26_068",
         "english": "Ring!",
-        "arabic": "المعتلُّ  اللاَّ م",
+        "arabic": "المعتلُّ اللاَّ م",
         "transliteration": "almatlّu allaّa m"
       },
       {
@@ -6649,7 +6649,7 @@
       {
         "id": "b2_l26_075",
         "english": "Tongue",
-        "arabic": "أن  حاءٌ",
+        "arabic": "أن حاءٌ",
         "transliteration": "an ha'un"
       },
       {
@@ -7425,7 +7425,7 @@
       {
         "id": "b2_l28_032",
         "english": "He erases",
-        "arabic": "يم  حو",
+        "arabic": "يم حو",
         "transliteration": "ym hw"
       },
       {
@@ -7593,7 +7593,7 @@
       {
         "id": "b2_l28_060",
         "english": "He remained",
-        "arabic": "خ  شي",
+        "arabic": "خ شي",
         "transliteration": "kh shy"
       },
       {
@@ -8081,7 +8081,7 @@
       {
         "id": "b2_l30_017",
         "english": "Ma of questioning",
-        "arabic": "ما ا  لإِستفهامية",
+        "arabic": "ما ا لإِستفهامية",
         "transliteration": "ma a liistfhamyah"
       },
       {
@@ -8134,7 +8134,7 @@
       },
       {
         "id": "b2_l30_026",
-        "english": "\u001a of negation",
+        "english": "of negation",
         "arabic": "َ",
         "transliteration": "a"
       },
@@ -8171,7 +8171,7 @@
       {
         "id": "b2_l30_032",
         "english": "Turkish",
-        "arabic": "م  رحلة",
+        "arabic": "م رحلة",
         "transliteration": "m rhlah"
       },
       {
@@ -8226,7 +8226,7 @@
       {
         "id": "b2_l31_006",
         "english": "Definite form",
-        "arabic": "الإِ  عراب",
+        "arabic": "الإِ عراب",
         "transliteration": "alii arab"
       },
       {
@@ -8280,7 +8280,7 @@
       {
         "id": "b2_l31_015",
         "english": "Feminine form",
-        "arabic": "التأ  نيث",
+        "arabic": "التأ نيث",
         "transliteration": "alta nyth"
       },
       {
@@ -8298,7 +8298,7 @@
       {
         "id": "b2_l31_018",
         "english": "Plural form",
-        "arabic": "الج  مع",
+        "arabic": "الج مع",
         "transliteration": "alj ma"
       }
     ]
