@@ -886,23 +886,24 @@ class VocabTrainer {
             
             console.log(`  Lesson ${lessonData.lesson}: unlocked=${unlocked}, mastered=${mastered}`);
             
-            // Count mastered words and correct answers
-            let masteredCount = 0;
-            let correctCount = 0;
-            let attemptedCount = 0;
+            // Count tests completed (3 tests per lesson: English→Arabic, Arabic→English, Mixed)
+            const totalWords = lessonData.items.length;
+            let englishArabicComplete = 0;
+            let arabicEnglishComplete = 0;
+            let mixedComplete = 0;
             
             lessonData.items.forEach(item => {
                 const wp = this.getWordProgress(item.id);
-                if (this.isWordMastered(item.id)) {
-                    masteredCount++;
-                }
-                if (wp.correct_count > 0) {
-                    correctCount++;
-                }
-                if (wp.correct_count > 0 || wp.incorrect_count > 0) {
-                    attemptedCount++;
-                }
+                if (wp.english_arabic_correct) englishArabicComplete++;
+                if (wp.arabic_english_correct) arabicEnglishComplete++;
+                if (wp.mixed_correct) mixedComplete++;
             });
+            
+            // A test is complete if all words are correct for that mode
+            let testsCompleted = 0;
+            if (englishArabicComplete === totalWords) testsCompleted++;
+            if (arabicEnglishComplete === totalWords) testsCompleted++;
+            if (mixedComplete === totalWords) testsCompleted++;
             
             let status = 'locked';
             let statusText = 'Locked';
@@ -926,17 +927,8 @@ class VocabTrainer {
                 card.classList.add('locked');
             }
             
-            // Build stats text
-            let statsText = `Mastered: ${masteredCount} / ${lessonData.items.length} words`;
-            if (correctCount > masteredCount) {
-                statsText += ` (${correctCount} correct`;
-                if (attemptedCount > correctCount) {
-                    statsText += `, ${attemptedCount} attempted`;
-                }
-                statsText += ')';
-            } else if (attemptedCount > masteredCount) {
-                statsText += ` (${attemptedCount} attempted)`;
-            }
+            // Build stats text - show tests completed AND unique word count
+            let statsText = `Tests: ${testsCompleted}/3 (${totalWords} words)`;
             
             card.innerHTML = `
                 <div class="lesson-header">
@@ -981,20 +973,39 @@ class VocabTrainer {
     }
     
     updateGlobalStats() {
-        let totalWords = 0;
-        let totalMastered = 0;
+        let totalLessons = 0;
+        let totalTestsCompleted = 0;
+        let totalUniqueWords = 0;
         
         for (const bookNum of [1, 2]) {
             this.books[bookNum].forEach(lesson => {
-                totalWords += lesson.items.length;
-                totalMastered += lesson.items.filter(item => 
-                    this.isWordMastered(item.id)
-                ).length;
+                totalLessons++;
+                const totalWords = lesson.items.length;
+                totalUniqueWords += totalWords;
+                
+                // Count completed tests for this lesson
+                let englishArabicComplete = 0;
+                let arabicEnglishComplete = 0;
+                let mixedComplete = 0;
+                
+                lesson.items.forEach(item => {
+                    const wp = this.getWordProgress(item.id);
+                    if (wp.english_arabic_correct) englishArabicComplete++;
+                    if (wp.arabic_english_correct) arabicEnglishComplete++;
+                    if (wp.mixed_correct) mixedComplete++;
+                });
+                
+                // A test is complete if all words are correct
+                if (englishArabicComplete === totalWords) totalTestsCompleted++;
+                if (arabicEnglishComplete === totalWords) totalTestsCompleted++;
+                if (mixedComplete === totalWords) totalTestsCompleted++;
             });
         }
         
-        document.getElementById('total-words').textContent = totalWords;
-        document.getElementById('total-mastered').textContent = totalMastered;
+        // 3 tests per lesson
+        const totalTests = totalLessons * 3;
+        document.getElementById('total-words').textContent = `${totalTestsCompleted}/${totalTests}`;
+        document.getElementById('total-mastered').textContent = totalUniqueWords;
     }
     
     updateLessonProgress(book, lesson) {

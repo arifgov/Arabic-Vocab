@@ -792,7 +792,7 @@ input, textarea {
     direction: rtl;
     text-align: center;
     font-family: 'Arial', 'Times New Roman', serif;
-    font-size: 3rem;
+    font-size: 4.5rem;
     line-height: 1.4;
     background: linear-gradient(135deg, #fef9c3 0%, #fde047 100%);
     padding: 0.75rem 1rem;
@@ -847,7 +847,7 @@ input, textarea {
 .mcq-option .arabic-text {
     direction: rtl;
     font-family: 'Arial', 'Times New Roman', serif;
-    font-size: 1.75rem;
+    font-size: 2.5rem;
     flex: 1;
     text-align: right;
 }
@@ -976,7 +976,7 @@ input, textarea {
 .feedback .correct-answer .arabic-text {
     direction: rtl;
     font-family: 'Arial', 'Times New Roman', serif;
-    font-size: 2.25rem;
+    font-size: 3rem;
     margin-top: 0.5rem;
     color: var(--text-color);
 }
@@ -988,7 +988,7 @@ input, textarea {
 }
 
 .feedback .plural-info .arabic-text {
-    font-size: 2.5rem;
+    font-size: 3.5rem;
     margin-top: 0.25rem;
     display: inline;
 }
@@ -1104,7 +1104,7 @@ input, textarea {
 .weak-word-item .arabic-text {
     direction: rtl;
     font-family: 'Arial', 'Times New Roman', serif;
-    font-size: 2.25rem;
+    font-size: 3rem;
     margin-left: 1rem;
 }
 
@@ -1146,12 +1146,12 @@ input, textarea {
     }
     
     .prompt.arabic {
-        font-size: 2.5rem;
+        font-size: 3.5rem;
         padding: 0.875rem;
     }
     
     .mcq-option .arabic-text {
-        font-size: 1.75rem;
+        font-size: 2.25rem;
     }
     
     .global-stats {
@@ -1472,8 +1472,20 @@ html {
     }
     
     .prompt.arabic {
-        font-size: 2.5rem;
+        font-size: 3.5rem;
         padding: 0.5rem 0.75rem;
+    }
+    
+    .mcq-option .arabic-text {
+        font-size: 2.25rem;
+    }
+    
+    .feedback .correct-answer .arabic-text {
+        font-size: 2.5rem;
+    }
+    
+    .feedback .plural-info .arabic-text {
+        font-size: 3rem;
     }
 }
 
