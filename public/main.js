@@ -104,17 +104,12 @@ class VocabTrainer {
                 // Ensure UI is updated (handleAuthStateChange should have done this, but double-check)
                 this.updateUserUI(user);
                 window.firebaseSyncManager.setUserId(user.uid);
-                // On redirect login: Check if first login or merge
-                const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
-                const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
-                                     JSON.parse(hasLocalProgress).wordProgress === undefined ||
-                                     Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
                 
-                if (isFirstLogin) {
-                    await this.syncProgressFromServer(true);
-                } else {
-                    await this.syncProgressFromServer(false);
-                }
+                // Always sync from Firebase on redirect login
+                console.log('🔄 Syncing with Firebase after redirect...');
+                await this.syncProgressFromServer();
+                this.refreshCurrentView();
+                
                 this.hideLoginView();
                 return true;
             } else {
@@ -209,19 +204,16 @@ class VocabTrainer {
                                  JSON.parse(hasLocalProgress).wordProgress === undefined ||
                                  Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
             
-            if (isFirstLogin) {
-                // First login: Load from Firebase as source of truth
-                console.log('📥 First login detected - loading from Firebase...');
-                await this.syncProgressFromServer(true);
-            } else {
-                // Page refresh: Merge Firebase with local (preserve newer data)
-                console.log('🔄 Page refresh detected - merging Firebase with local progress...');
-                await this.syncProgressFromServer(false);
-            }
+            // Always sync from Firebase on page load/refresh
+            console.log('🔄 Syncing with Firebase...');
+            await this.syncProgressFromServer();
             
             // Ensure UI is updated
             this.updateUserUI(user);
             this.hideLoginView();
+            
+            // Refresh the current view to show updated data
+            this.refreshCurrentView();
         }
     }
     
@@ -239,15 +231,12 @@ class VocabTrainer {
                                  Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
             
             try {
-                if (isFirstLogin) {
-                    // First login: Load from Firebase as source of truth
-                    console.log('📥 First login detected - loading from Firebase...');
-                    await this.syncProgressFromServer(true);
-                } else {
-                    // Page refresh: Merge Firebase with local (preserve newer data)
-                    console.log('🔄 Page refresh detected - merging Firebase with local progress...');
-                    await this.syncProgressFromServer(false);
-                }
+                // Always sync from Firebase on page load/refresh
+                console.log('🔄 Syncing with Firebase...');
+                await this.syncProgressFromServer();
+                
+                // Refresh the current view to show updated data
+                this.refreshCurrentView();
             } catch (error) {
                 console.error('Error syncing progress:', error);
             }
@@ -307,34 +296,43 @@ class VocabTrainer {
                 return;
             }
             
+            console.log('📥 Loading progress from Firebase...');
             const serverProgress = await window.firebaseSyncManager.loadProgress();
+            
             if (serverProgress) {
-                if (refreshFromFirebase) {
-                    // First login: Use Firebase as source of truth, replace local cache
-                    console.log('📥 Refreshing local cache from Firebase (source of truth)...');
-                    this.progress = serverProgress;
-                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                    console.log('✅ Local cache refreshed from Firebase');
-                } else {
-                    // During session/page refresh: Merge server progress with local (preserve most progress)
-                    console.log('📥 Merging server progress with local...');
-                    // Always reload local progress to ensure we have the latest
-                    const localProgress = this.loadProgress();
-                    const mergedProgress = this.mergeProgress(localProgress, serverProgress);
-                    this.progress = mergedProgress;
-                    
-                    // CRITICAL FIX: Only save to localStorage, DON'T trigger Firebase sync
-                    // This prevents race condition where page refresh during active sync
-                    // could cause old data to overwrite new data
-                    // The next user action or manual sync will sync the correct merged data
-                    
-                    // Add timestamp to merged data so manual sync will have correct timestamp
-                    this.progress.localModifiedAt = Date.now();
-                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                    console.log('✅ Progress merged and saved to localStorage (not syncing to avoid race condition)');
+                // ALWAYS use Firebase as source of truth for cross-device sync
+                // Firebase has the latest data from all devices
+                const localProgress = this.loadProgress();
+                
+                // Merge: Firebase + Local, taking the MOST progress from either
+                // This ensures we never lose progress from any device
+                const mergedProgress = this.mergeProgress(localProgress, serverProgress);
+                
+                console.log('📊 Merge result:');
+                console.log('   - Local word count:', Object.keys(localProgress.wordProgress || {}).length);
+                console.log('   - Server word count:', Object.keys(serverProgress.wordProgress || {}).length);
+                console.log('   - Merged word count:', Object.keys(mergedProgress.wordProgress || {}).length);
+                
+                this.progress = mergedProgress;
+                this.progress.localModifiedAt = Date.now();
+                localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                console.log('✅ Progress synced from Firebase and merged with local');
+                
+                // If merged data has more progress than server, sync back to Firebase
+                const serverWordCount = Object.keys(serverProgress.wordProgress || {}).length;
+                const mergedWordCount = Object.keys(mergedProgress.wordProgress || {}).length;
+                if (mergedWordCount > serverWordCount) {
+                    console.log('📤 Local has additional progress, syncing back to Firebase...');
+                    window.firebaseSyncManager.saveProgress(this.progress);
                 }
             } else {
                 console.log('📭 No server progress found, using local storage');
+                // If we have local progress but no server progress, sync to server
+                const localProgress = this.loadProgress();
+                if (Object.keys(localProgress.wordProgress || {}).length > 0) {
+                    console.log('📤 Uploading local progress to Firebase...');
+                    window.firebaseSyncManager.saveProgress(localProgress);
+                }
             }
         } catch (error) {
             console.warn('⚠️ Error syncing from server (continuing with local storage):', error);
@@ -852,26 +850,31 @@ class VocabTrainer {
         document.getElementById(viewId).classList.add('active');
     }
     
-    async showDashboard() {
-        // Reload progress to ensure we have latest data (from both localStorage and Firebase)
+    // Refresh the current view to show updated progress data
+    refreshCurrentView() {
+        // Reload progress from localStorage (which should have the latest merged data)
         this.progress = this.loadProgress();
         
-        // If authenticated, try to sync from Firebase
-        if (window.firebaseSyncManager?.syncEnabled) {
-            try {
-                const serverProgress = await window.firebaseSyncManager.loadProgress();
-                if (serverProgress) {
-                    // Merge server progress (server wins on conflicts)
-                    this.progress = this.mergeProgress(this.progress, serverProgress);
-                    // Save merged progress to localStorage
-                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                }
-            } catch (error) {
-                console.warn('Could not load from Firebase, using local:', error);
-            }
-        }
+        // Get current active view
+        const activeView = document.querySelector('.view.active');
+        if (!activeView) return;
         
-        console.log('🏠 Dashboard: Reloaded progress,', Object.keys(this.progress.wordProgress || {}).length, 'words tracked');
+        const viewId = activeView.id;
+        console.log('🔄 Refreshing current view:', viewId);
+        
+        if (viewId === 'dashboard-view') {
+            this.renderLessonsList();
+            this.updateGlobalStats();
+        } else if (viewId === 'lesson-view' && this.currentBook && this.currentLesson) {
+            this.updateLessonProgress(this.currentBook, this.currentLesson);
+        }
+    }
+    
+    async showDashboard() {
+        // Reload progress from localStorage (synced data is already there)
+        this.progress = this.loadProgress();
+        
+        console.log('🏠 Dashboard: Loaded progress,', Object.keys(this.progress.wordProgress || {}).length, 'words tracked');
         this.showView('dashboard-view');
         this.renderLessonsList();
         this.updateGlobalStats();
