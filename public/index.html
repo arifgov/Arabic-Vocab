@@ -77,6 +77,12 @@
                             <div id="dropdown-user-name"></div>
                             <div id="dropdown-user-email"></div>
                         </div>
+                        <div class="dropdown-divider"></div>
+                        <button id="reset-lesson-menu-btn" class="dropdown-item" style="display: none;">Reset This Lesson</button>
+                        <button id="reset-all-menu-btn" class="dropdown-item" style="display: none;">Reset All Progress</button>
+                        <button id="sync-to-firebase-btn" class="dropdown-item" style="display: none;">Sync to Firebase Now</button>
+                        <button id="clear-cache-btn" class="dropdown-item" style="display: none;">Clear Cache & Sync from Firebase</button>
+                        <div class="dropdown-divider"></div>
                         <button id="logout-btn" class="dropdown-item">Logout</button>
                     </div>
                 </div>
@@ -135,9 +141,6 @@
             
             <div id="lessons-list" class="lessons-list"></div>
             
-            <div class="actions">
-                <button id="reset-all-btn" class="btn btn-danger">Reset All Progress</button>
-            </div>
         </div>
         
         <!-- Lesson View -->
@@ -177,6 +180,9 @@
                     <div class="progress-text">
                         <span id="text-arabic-english">0 / 0 words</span>
                     </div>
+                    <div class="review-mistakes-btn-container" style="margin-top: 0.5rem;">
+                        <button id="review-mistakes-arabic-english-btn" class="btn btn-secondary btn-sm" style="display: none;">Review Mistakes</button>
+                    </div>
                 </div>
                 
                 <!-- Mixed Progress -->
@@ -191,13 +197,14 @@
                     <div class="progress-text">
                         <span id="text-mixed">0 / 0 words</span>
                     </div>
+                    <div class="review-mistakes-btn-container" style="margin-top: 0.5rem;">
+                        <button id="review-mistakes-mixed-btn" class="btn btn-secondary btn-sm" style="display: none;">Review Mistakes</button>
+                    </div>
                 </div>
             </div>
             
             <div class="lesson-actions">
                 <button id="final-test-btn" class="btn btn-success" style="display: none;">Take Final Test (75% Mixed)</button>
-                <button id="review-mistakes-btn" class="btn btn-secondary">Review Mistakes Only</button>
-                <button id="reset-lesson-btn" class="btn btn-danger">Reset This Lesson</button>
             </div>
         </div>
         

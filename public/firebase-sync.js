@@ -8,9 +8,9 @@ class FirebaseSync {
         this.syncing = false;
         this.pendingProgress = null;
         this.syncTimer = null;
-        this.syncDelay = 3000; // Wait 3 seconds before syncing (debounce)
+        this.syncDelay = 500; // Reduced to 500ms for faster sync
         this.lastSyncTime = 0;
-        this.minSyncInterval = 5000; // Minimum 5 seconds between syncs
+        this.minSyncInterval = 1000; // Reduced to 1 second for faster sync
     }
 
     async init() {
@@ -105,13 +105,32 @@ class FirebaseSync {
         }
     }
     
-    // Force immediate sync (e.g., when leaving a view)
+    // Force immediate sync (e.g., when leaving a view or manual sync)
     async forceSync() {
         if (this.syncTimer) {
             clearTimeout(this.syncTimer);
             this.syncTimer = null;
         }
-        return this.performSync();
+        // If there's pending progress, sync it immediately
+        if (this.pendingProgress) {
+            return this.performSync();
+        }
+        // If no pending progress but we have a userId, try to load current progress and sync
+        // This handles manual sync requests
+        if (this.syncEnabled && this.userId) {
+            // Try to get current progress from the app
+            const currentProgress = localStorage.getItem('madinah_vocab_progress');
+            if (currentProgress) {
+                try {
+                    const progressData = JSON.parse(currentProgress);
+                    this.pendingProgress = progressData;
+                    return this.performSync();
+                } catch (e) {
+                    console.error('Error parsing progress for sync:', e);
+                }
+            }
+        }
+        return false;
     }
 
     async loadProgress() {

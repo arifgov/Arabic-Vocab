@@ -22,7 +22,39 @@ class VocabTrainer {
         this.progress = this.loadProgress();
         console.log('Initial progress loaded:', this.progress);
         
+        // History management for browser back button
+        this.historyState = { view: 'dashboard', book: 1, lesson: null };
+        this.setupHistoryListener();
+        
         this.init();
+    }
+    
+    setupHistoryListener() {
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (e) => {
+            if (e.state) {
+                this.historyState = e.state;
+                this.navigateToState(e.state);
+            } else {
+                // No state, go to dashboard
+                this.showDashboard();
+            }
+        });
+    }
+    
+    pushHistoryState(view, book = null, lesson = null) {
+        const state = { view, book, lesson };
+        this.historyState = state;
+        history.pushState(state, '', '#');
+    }
+    
+    async navigateToState(state) {
+        if (state.view === 'dashboard') {
+            await this.showDashboard();
+        } else if (state.view === 'lesson' && state.book && state.lesson) {
+            await this.showLessonView(state.book, state.lesson);
+        }
+        // Don't navigate to question or summary views from history
     }
     
     async init() {
@@ -53,7 +85,8 @@ class VocabTrainer {
                 // Ensure UI is updated (handleAuthStateChange should have done this, but double-check)
                 this.updateUserUI(user);
                 window.firebaseSyncManager.setUserId(user.uid);
-                await this.syncProgressFromServer();
+                // Refresh local cache from Firebase at login (Firebase is source of truth)
+                await this.syncProgressFromServer(true);
                 this.hideLoginView();
                 return true;
             } else {
@@ -141,8 +174,8 @@ class VocabTrainer {
             console.log('✅ User is authenticated in checkAuthState, setting up sync...');
             // User is authenticated, set up sync
             window.firebaseSyncManager.setUserId(user.uid);
-            // Try to load progress from Firestore
-            await this.syncProgressFromServer();
+            // Refresh local cache from Firebase at login (Firebase is source of truth)
+            await this.syncProgressFromServer(true);
             // Ensure UI is updated
             this.updateUserUI(user);
             this.hideLoginView();
@@ -155,9 +188,9 @@ class VocabTrainer {
             console.log('✅ User is authenticated, updating UI and syncing...');
             window.firebaseSyncManager.setUserId(user.uid);
             this.updateUserUI(user);
-            // Sync progress from server when user signs in
+            // Refresh local cache from Firebase at login (Firebase is source of truth)
             try {
-                await this.syncProgressFromServer();
+                await this.syncProgressFromServer(true);
             } catch (error) {
                 console.error('Error syncing progress:', error);
             }
@@ -203,7 +236,7 @@ class VocabTrainer {
         if (userMenu) userMenu.style.display = 'none';
     }
     
-    async syncProgressFromServer() {
+    async syncProgressFromServer(refreshFromFirebase = false) {
         try {
             if (!window.firebaseSyncManager || !window.firebaseSyncManager.syncEnabled) {
                 console.log('📭 Sync not enabled, skipping server sync');
@@ -212,10 +245,18 @@ class VocabTrainer {
             
             const serverProgress = await window.firebaseSyncManager.loadProgress();
             if (serverProgress) {
-                // Merge server progress with local (server wins on conflicts)
-                console.log('📥 Merging server progress with local...');
-                this.progress = this.mergeProgress(this.progress, serverProgress);
-                this.saveProgress();
+                if (refreshFromFirebase) {
+                    // At login: Use Firebase as source of truth, replace local cache
+                    console.log('📥 Refreshing local cache from Firebase (source of truth)...');
+                    this.progress = serverProgress;
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                    console.log('✅ Local cache refreshed from Firebase');
+                } else {
+                    // During session: Merge server progress with local (server wins on conflicts)
+                    console.log('📥 Merging server progress with local...');
+                    this.progress = this.mergeProgress(this.progress, serverProgress);
+                    this.saveProgress();
+                }
             } else {
                 console.log('📭 No server progress found, using local storage');
             }
@@ -226,7 +267,8 @@ class VocabTrainer {
     }
     
     mergeProgress(local, server) {
-        // Merge strategy: preserve progress (true values win over false)
+        // Merge strategy: Firebase (server) is the source of truth - server values win on conflicts
+        // But we merge to preserve local progress that hasn't been synced yet
         const merged = {
             wordProgress: {},
             lessonStatus: { 1: {}, 2: {} },
@@ -235,7 +277,7 @@ class VocabTrainer {
             lastMode: server.lastMode || local.lastMode
         };
         
-        // Merge word progress - true values win
+        // Merge word progress - server wins on conflicts, but merge counts to preserve latest
         const allWordIds = new Set([
             ...Object.keys(local.wordProgress || {}),
             ...Object.keys(server.wordProgress || {})
@@ -244,21 +286,26 @@ class VocabTrainer {
         allWordIds.forEach(id => {
             const localWp = local.wordProgress?.[id] || {};
             const serverWp = server.wordProgress?.[id] || {};
+            
+            // Server wins for boolean flags (mastered, correct flags)
+            // But merge counts to get the highest values
             merged.wordProgress[id] = {
                 correct_count: Math.max(localWp.correct_count || 0, serverWp.correct_count || 0),
                 incorrect_count: Math.max(localWp.incorrect_count || 0, serverWp.incorrect_count || 0),
                 consecutive_correct: Math.max(localWp.consecutive_correct || 0, serverWp.consecutive_correct || 0),
-                mastered: localWp.mastered || serverWp.mastered || false,
-                english_arabic_correct: localWp.english_arabic_correct || serverWp.english_arabic_correct || false,
-                arabic_english_correct: localWp.arabic_english_correct || serverWp.arabic_english_correct || false,
-                mixed_correct: localWp.mixed_correct || serverWp.mixed_correct || false,
+                // Server wins for boolean flags
+                mastered: serverWp.mastered !== undefined ? serverWp.mastered : (localWp.mastered || false),
+                english_arabic_correct: serverWp.english_arabic_correct !== undefined ? serverWp.english_arabic_correct : (localWp.english_arabic_correct || false),
+                arabic_english_correct: serverWp.arabic_english_correct !== undefined ? serverWp.arabic_english_correct : (localWp.arabic_english_correct || false),
+                mixed_correct: serverWp.mixed_correct !== undefined ? serverWp.mixed_correct : (localWp.mixed_correct || false),
+                // Session flags are local only
                 session_english_arabic: localWp.session_english_arabic || false,
                 session_arabic_english: localWp.session_arabic_english || false,
                 session_mixed: localWp.session_mixed || false
             };
         });
         
-        // Merge lesson status - final_test_passed true wins
+        // Merge lesson status - server wins
         for (const book of [1, 2]) {
             const localLessons = local.lessonStatus?.[book] || {};
             const serverLessons = server.lessonStatus?.[book] || {};
@@ -270,15 +317,16 @@ class VocabTrainer {
             allLessons.forEach(lesson => {
                 const localStatus = localLessons[lesson] || {};
                 const serverStatus = serverLessons[lesson] || {};
+                // Server wins, but fallback to local if server doesn't have it
                 merged.lessonStatus[book][lesson] = {
-                    mastered: localStatus.mastered || serverStatus.mastered || false,
-                    final_test_passed: localStatus.final_test_passed || serverStatus.final_test_passed || false,
-                    date_completed: localStatus.date_completed || serverStatus.date_completed || null
+                    mastered: serverStatus.mastered !== undefined ? serverStatus.mastered : (localStatus.mastered || false),
+                    final_test_passed: serverStatus.final_test_passed !== undefined ? serverStatus.final_test_passed : (localStatus.final_test_passed || false),
+                    date_completed: serverStatus.date_completed || localStatus.date_completed || null
                 };
             });
         }
         
-        console.log('🔀 Merged progress - preserving all true values');
+        console.log('🔀 Merged progress - Firebase is source of truth');
         return merged;
     }
     
@@ -373,12 +421,30 @@ class VocabTrainer {
             localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
             console.log('💾 Progress saved to localStorage');
             
-            // Also sync to Firestore if authenticated (non-blocking)
+            // Sync to Firestore if authenticated - Firebase is source of truth
             if (window.firebaseSyncManager?.syncEnabled) {
+                // Use saveProgress which will handle debouncing and immediate sync when needed
                 window.firebaseSyncManager.saveProgress(this.progress).catch(error => {
-                    // Silently fail - local storage is the source of truth
                     console.warn('Background sync failed (local storage saved):', error.code || error.message);
                 });
+            }
+        } catch (e) {
+            console.error('❌ Error saving progress:', e);
+            alert('Warning: Could not save progress. Check if localStorage is enabled.');
+        }
+    }
+    
+    // Force immediate sync (for critical saves)
+    async saveProgressImmediate() {
+        if (!this.progress) {
+            this.progress = this.loadProgress();
+        }
+        try {
+            localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+            
+            // Force immediate Firebase sync
+            if (window.firebaseSyncManager?.syncEnabled) {
+                await window.firebaseSyncManager.forceSync();
             }
         } catch (e) {
             console.error('❌ Error saving progress:', e);
@@ -498,6 +564,43 @@ class VocabTrainer {
                 });
                 this.showLessonView(book, lesson);
             }
+        }
+    }
+    
+    async clearLocalCacheAndSync() {
+        if (!window.firebaseSyncManager?.syncEnabled) {
+            alert('You must be signed in to sync from Firebase.');
+            return;
+        }
+        
+        try {
+            // Clear local cache
+            localStorage.removeItem('madinah_vocab_progress');
+            
+            // Load from Firebase
+            const serverProgress = await window.firebaseSyncManager.loadProgress();
+            if (serverProgress) {
+                // Use Firebase as source of truth
+                this.progress = serverProgress;
+                localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                alert('Cache cleared and progress synced from Firebase!');
+                
+                // Refresh current view
+                if (this.currentLesson) {
+                    await this.showLessonView(this.currentBook, this.currentLesson);
+                } else {
+                    await this.showDashboard();
+                }
+            } else {
+                // No Firebase data, initialize fresh
+                this.progress = this.loadProgress();
+                this.initializeProgress();
+                alert('Cache cleared. No data found in Firebase, starting fresh.');
+                await this.showDashboard();
+            }
+        } catch (error) {
+            console.error('Error clearing cache:', error);
+            alert('Error clearing cache: ' + error.message);
         }
     }
     
@@ -639,6 +742,12 @@ class VocabTrainer {
         this.showView('dashboard-view');
         this.renderLessonsList();
         this.updateGlobalStats();
+        
+        // Update user menu - show reset all button
+        this.updateUserMenuVisibility(false);
+        
+        // Update history
+        this.pushHistoryState('dashboard', this.currentBook, null);
     }
     
     async showLessonView(book, lesson) {
@@ -672,6 +781,100 @@ class VocabTrainer {
             finalTestBtn.style.display = 'block';
         } else {
             finalTestBtn.style.display = 'none';
+        }
+        
+        // Show/hide review mistakes buttons based on mistakes in each mode
+        this.updateReviewMistakesButtons(book, lesson);
+        
+        // Update user menu - show reset lesson button
+        this.updateUserMenuVisibility(true);
+        
+        // Update history
+        this.pushHistoryState('lesson', book, lesson);
+    }
+    
+    updateReviewMistakesButtons(book, lesson) {
+        const lessonData = this.books[book].find(l => l.lesson === lesson);
+        if (!lessonData) return;
+        
+        // Check if Arabic-English mode is completed
+        const arabicEnglishBtn = document.getElementById('review-mistakes-arabic-english-btn');
+        const arabicEnglishCompleted = lessonData.items.every(item => {
+            const wp = this.getWordProgress(item.id);
+            return wp.arabic_english_correct === true;
+        });
+        
+        // Only show review button if mode is NOT completed AND there are actual mistakes to review
+        if (arabicEnglishBtn) {
+            if (arabicEnglishCompleted) {
+                // Mode is completed, hide the button
+                arabicEnglishBtn.style.display = 'none';
+            } else {
+                // Mode not completed, check if there are actual mistakes (words that have been attempted and got wrong)
+                const hasMistakes = lessonData.items.some(item => {
+                    const wp = this.getWordProgress(item.id);
+                    // Only show if word has been attempted (incorrect_count > 0) AND is not correct in this mode
+                    // This ensures we don't show the button for unstarted lessons
+                    return wp.incorrect_count > 0 && !wp.arabic_english_correct;
+                });
+                arabicEnglishBtn.style.display = hasMistakes ? 'block' : 'none';
+            }
+        }
+        
+        // Check if Mixed mode is completed
+        const mixedBtn = document.getElementById('review-mistakes-mixed-btn');
+        const mixedCompleted = lessonData.items.every(item => {
+            const wp = this.getWordProgress(item.id);
+            return wp.mixed_correct === true;
+        });
+        
+        // Only show review button if mode is NOT completed AND there are actual mistakes to review
+        if (mixedBtn) {
+            if (mixedCompleted) {
+                // Mode is completed, hide the button
+                mixedBtn.style.display = 'none';
+            } else {
+                // Check if Mixed mode has been started (at least one word attempted in Mixed mode)
+                const mixedModeStarted = lessonData.items.some(item => {
+                    const wp = this.getWordProgress(item.id);
+                    // Mixed mode has been started if any word has mixed_correct = true
+                    return wp.mixed_correct === true;
+                });
+                
+                if (!mixedModeStarted) {
+                    // Mixed mode hasn't been started, don't show the button
+                    mixedBtn.style.display = 'none';
+                } else {
+                    // Mixed mode has been started, check if there are actual mistakes
+                    const hasMistakes = lessonData.items.some(item => {
+                        const wp = this.getWordProgress(item.id);
+                        // Only show if word has been attempted and got wrong in Mixed mode
+                        // Since incorrect_count is global, we check: incorrect_count > 0 AND not correct in Mixed
+                        return wp.incorrect_count > 0 && !wp.mixed_correct;
+                    });
+                    mixedBtn.style.display = hasMistakes ? 'block' : 'none';
+                }
+            }
+        }
+    }
+    
+    updateUserMenuVisibility(inLesson = false) {
+        const resetLessonBtn = document.getElementById('reset-lesson-menu-btn');
+        const resetAllBtn = document.getElementById('reset-all-menu-btn');
+        const syncToFirebaseBtn = document.getElementById('sync-to-firebase-btn');
+        const clearCacheBtn = document.getElementById('clear-cache-btn');
+        
+        if (resetLessonBtn) {
+            resetLessonBtn.style.display = inLesson ? 'block' : 'none';
+        }
+        if (resetAllBtn) {
+            resetAllBtn.style.display = inLesson ? 'none' : 'block';
+        }
+        if (syncToFirebaseBtn) {
+            syncToFirebaseBtn.style.display = window.firebaseSyncManager?.syncEnabled ? 'block' : 'none';
+        }
+        if (clearCacheBtn) {
+            clearCacheBtn.style.display = window.firebaseSyncManager?.syncEnabled ? 'block' : 'none';
         }
     }
     
@@ -861,8 +1064,8 @@ class VocabTrainer {
         
         container.innerHTML = '';
         
-        // Always reload progress to ensure we have latest data
-        this.progress = this.loadProgress();
+        // Progress is already loaded in showDashboard, no need to reload here
+        // getWordProgress will reload if needed
         
         const lessons = this.books[this.currentBook];
         
@@ -874,12 +1077,12 @@ class VocabTrainer {
         
         console.log(`📚 Rendering ${lessons.length} lessons for Book ${this.currentBook}`);
         
+        // Load progress once before the loop (getWordProgress will reload if needed)
+        this.progress = this.loadProgress();
+        
         lessons.forEach(lessonData => {
             const card = document.createElement('div');
             card.className = 'lesson-card';
-            
-            // Reload progress for each lesson check to ensure fresh data
-            this.progress = this.loadProgress();
             
             const mastered = this.isLessonMastered(this.currentBook, lessonData.lesson);
             const unlocked = this.isLessonUnlocked(this.currentBook, lessonData.lesson);
@@ -1118,9 +1321,24 @@ class VocabTrainer {
             const testWordCount = Math.ceil(totalWords * 0.75);
             pool = [...pool].sort(() => Math.random() - 0.5).slice(0, testWordCount);
         } else if (reviewMistakesOnly) {
+            // Filter mistakes by the specific mode - only show words that have been attempted AND got wrong
             pool = pool.filter(item => {
                 const wp = this.getWordProgress(item.id);
-                return !wp.mastered && wp.incorrect_count > 0;
+                if (mode === 'arabic-english') {
+                    // For Arabic-English, only show words that:
+                    // 1. Have been attempted (incorrect_count > 0 OR correct_count > 0)
+                    // 2. AND are not correct in this mode
+                    const hasBeenAttempted = wp.incorrect_count > 0 || wp.correct_count > 0;
+                    return hasBeenAttempted && !wp.arabic_english_correct;
+                } else if (mode === 'mixed') {
+                    // For Mixed, only show words that have been attempted and are not correct
+                    const hasBeenAttempted = wp.incorrect_count > 0 || wp.correct_count > 0;
+                    return hasBeenAttempted && !wp.mixed_correct;
+                } else {
+                    // For English-Arabic (default), only show words that have been attempted and are not correct
+                    const hasBeenAttempted = wp.incorrect_count > 0 || wp.correct_count > 0;
+                    return hasBeenAttempted && !wp.english_arabic_correct;
+                }
             });
         } else {
             // Regular practice: use all words (each word shown once)
@@ -1296,7 +1514,56 @@ class VocabTrainer {
     }
     
     // Lenient answer checking with fuzzy matching
+    checkAnswerStrict(userAnswer, correctAnswer) {
+        // Stricter checking for Arabic-English mode
+        // Only allow exact matches after normalization (no fuzzy matching)
+        const normalizeText = (text) => {
+            let normalized = text.toLowerCase().trim();
+            
+            // Remove all punctuation
+            normalized = normalized.replace(/[.,;:!?()[\]{}'"]/g, '');
+            
+            // Normalize gender markers - expand abbreviations
+            normalized = normalized
+                .replace(/\b(m)\b/g, 'masculine')
+                .replace(/\bmasc\b/g, 'masculine')
+                .replace(/\b(f)\b/g, 'feminine')
+                .replace(/\bfem\b/g, 'feminine');
+            
+            // Normalize whitespace
+            normalized = normalized.replace(/\s+/g, ' ').trim();
+            
+            return normalized;
+        };
+        
+        const normalizedUser = normalizeText(userAnswer);
+        const normalizedCorrect = normalizeText(correctAnswer);
+        
+        // Exact match after normalization
+        if (normalizedUser === normalizedCorrect) {
+            return true;
+        }
+        
+        // Allow core meaning match (without gender markers) - but still strict
+        const coreCorrect = normalizedCorrect
+            .replace(/masculine/g, '')
+            .replace(/feminine/g, '')
+            .trim();
+        const coreUser = normalizedUser
+            .replace(/masculine/g, '')
+            .replace(/feminine/g, '')
+            .trim();
+        
+        // Only accept if core matches exactly (no fuzzy matching)
+        if (coreUser === coreCorrect && coreCorrect.length > 0) {
+            return true;
+        }
+        
+        return false;
+    }
+    
     checkAnswerLenient(userAnswer, correctAnswer) {
+        // Lenient checking for other modes (if needed in future)
         // Normalize both answers
         const normalizeText = (text) => {
             let normalized = text.toLowerCase().trim();
@@ -1412,11 +1679,12 @@ class VocabTrainer {
                 }
             });
         } else if (actualMode === 'arabic-english') {
-            // Typing mode with lenient matching
+            // Typing mode - stricter matching for Arabic-English
             const userAnswer = document.getElementById('answer-input').value.trim();
             const correctAnswer = this.currentQuestion.english;
             
-            isCorrect = this.checkAnswerLenient(userAnswer, correctAnswer);
+            // Use stricter checking for Arabic-English mode
+            isCorrect = this.checkAnswerStrict(userAnswer, correctAnswer);
         }
         
         // Update progress
@@ -1618,6 +1886,13 @@ class VocabTrainer {
                 e.preventDefault();
                 e.stopPropagation();
                 console.log('🏠 Home button clicked');
+                // Save progress before navigating
+                if (this.progress) {
+                    this.saveProgress();
+                    if (window.firebaseSyncManager?.syncEnabled) {
+                        await window.firebaseSyncManager.forceSync();
+                    }
+                }
                 await this.showDashboard();
                 this.updateGlobalStats();
             });
@@ -1632,6 +1907,13 @@ class VocabTrainer {
             navBrand.addEventListener('click', async (e) => {
                 e.preventDefault();
                 console.log('🏠 Nav brand clicked');
+                // Save progress before navigating
+                if (this.progress) {
+                    this.saveProgress();
+                    if (window.firebaseSyncManager?.syncEnabled) {
+                        await window.firebaseSyncManager.forceSync();
+                    }
+                }
                 await this.showDashboard();
                 this.updateGlobalStats();
             });
@@ -1709,15 +1991,24 @@ class VocabTrainer {
             this.startMode('mixed');
         });
         
-        document.getElementById('review-mistakes-btn').addEventListener('click', () => {
-            // Use the last mode or default to english-arabic
-            this.currentMode = this.progress.lastMode || 'english-arabic';
-            this.progress.lastMode = this.currentMode;
+        // Review mistakes buttons for each mode
+        document.getElementById('review-mistakes-arabic-english-btn').addEventListener('click', () => {
+            this.currentMode = 'arabic-english';
+            this.progress.lastMode = 'arabic-english';
             this.saveProgress();
             this.reviewMistakesOnly = true;
             this.isFinalTest = false;
             this.questionPool = [];
-            // Don't resume for review mistakes mode
+            this.showQuestionView();
+        });
+        
+        document.getElementById('review-mistakes-mixed-btn').addEventListener('click', () => {
+            this.currentMode = 'mixed';
+            this.progress.lastMode = 'mixed';
+            this.saveProgress();
+            this.reviewMistakesOnly = true;
+            this.isFinalTest = false;
+            this.questionPool = [];
             this.showQuestionView();
         });
         
@@ -1732,10 +2023,6 @@ class VocabTrainer {
                 localStorage.removeItem(sessionKey);
                 this.showQuestionView();
             }
-        });
-        
-        document.getElementById('reset-lesson-btn').addEventListener('click', () => {
-            this.resetLessonProgress(this.currentBook, this.currentLesson);
         });
         
         // Question actions
@@ -1785,9 +2072,56 @@ class VocabTrainer {
             }
         });
         
-        // Reset all
-        document.getElementById('reset-all-btn').addEventListener('click', () => {
+        // User menu reset handlers
+        document.getElementById('reset-lesson-menu-btn').addEventListener('click', () => {
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            this.resetLessonProgress(this.currentBook, this.currentLesson);
+        });
+        
+        document.getElementById('reset-all-menu-btn').addEventListener('click', () => {
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
             this.resetAllProgress();
+        });
+        
+        // Manual sync to Firebase
+        document.getElementById('sync-to-firebase-btn').addEventListener('click', async () => {
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            
+            if (!window.firebaseSyncManager?.syncEnabled) {
+                alert('You must be signed in to sync to Firebase.');
+                return;
+            }
+            
+            try {
+                // Save current progress to localStorage first
+                this.saveProgress();
+                
+                // Force immediate sync to Firebase
+                const synced = await window.firebaseSyncManager.forceSync();
+                if (synced) {
+                    alert('✅ Progress synced to Firebase successfully!');
+                } else {
+                    // If forceSync returns false, try to sync current progress
+                    await window.firebaseSyncManager.saveProgress(this.progress);
+                    alert('✅ Progress queued for sync to Firebase.');
+                }
+            } catch (error) {
+                console.error('Error syncing to Firebase:', error);
+                alert('❌ Error syncing to Firebase: ' + (error.message || 'Unknown error'));
+            }
+        });
+        
+        // Clear cache and sync from Firebase
+        document.getElementById('clear-cache-btn').addEventListener('click', async () => {
+            const dropdown = document.getElementById('user-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+            
+            if (confirm('Clear local cache and reload from Firebase? This will replace your local progress with the Firebase version.')) {
+                await this.clearLocalCacheAndSync();
+            }
         });
     }
     

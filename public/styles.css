@@ -1282,6 +1282,22 @@ html {
     background: var(--bg-color);
 }
 
+.dropdown-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.5rem 0;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    width: 100%;
+}
+
+.review-mistakes-btn-container {
+    text-align: center;
+}
+
 /* Login View */
 #login-view {
     position: fixed;
