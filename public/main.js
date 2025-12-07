@@ -284,9 +284,10 @@ class VocabTrainer {
                 console.log('📭 Sync not enabled, skipping server sync');
                 return;
             }
-            
-            console.log('📥 Loading progress from Firebase...');
+
+            console.log('📥 Loading progress from Firebase (forcing fresh read)...');
             const serverProgress = await window.firebaseSyncManager.loadProgress();
+            console.log('📥 Server returned:', serverProgress ? `${Object.keys(serverProgress.wordProgress || {}).length} words` : 'null');
             
             if (serverProgress) {
                 // ALWAYS use Firebase as source of truth for cross-device sync
@@ -461,12 +462,18 @@ class VocabTrainer {
                 if (!parsed.lessonStatus) parsed.lessonStatus = { 1: {}, 2: {} };
                 if (!parsed.lessonStatus[1]) parsed.lessonStatus[1] = {};
                 if (!parsed.lessonStatus[2]) parsed.lessonStatus[2] = {};
+                
+                // Debug: Log what was loaded
+                console.log('📂 loadProgress: Loaded', Object.keys(parsed.wordProgress || {}).length, 'words from localStorage');
+                
                 return parsed;
             } catch (e) {
                 console.error('Error parsing progress:', e);
             }
         }
         
+        console.log('📂 loadProgress: No stored progress, returning default');
+
         return {
             wordProgress: {},
             lessonStatus: { 1: {}, 2: {} },
@@ -1247,6 +1254,16 @@ class VocabTrainer {
         // Load progress once before the loop (getWordProgress will reload if needed)
         this.progress = this.loadProgress();
         
+        // Debug: Log what's in progress
+        const progressWordIds = Object.keys(this.progress.wordProgress || {});
+        console.log(`📊 Progress contains ${progressWordIds.length} words:`, progressWordIds.slice(0, 10).join(', '), progressWordIds.length > 10 ? '...' : '');
+        
+        // Debug: Log first lesson's word IDs for comparison
+        if (lessons.length > 0 && lessons[0].items) {
+            const lesson1WordIds = lessons[0].items.map(item => item.id);
+            console.log(`📝 Lesson 1 word IDs:`, lesson1WordIds.slice(0, 5).join(', '), '...');
+        }
+        
         lessons.forEach(lessonData => {
             const card = document.createElement('div');
             card.className = 'lesson-card';
@@ -1290,12 +1307,27 @@ class VocabTrainer {
             const allModesComplete = this.areAllModesComplete(this.currentBook, lessonData.lesson);
             
             // Check if there's any actual progress (words attempted or mode flags set)
+            let progressCount = 0;
             const hasProgress = lessonData.items.some(item => {
                 const wp = this.getWordProgress(item.id);
                 // Check counts OR mode-specific completion flags
-                return wp.correct_count > 0 || wp.incorrect_count > 0 || 
+                const hasAny = wp.correct_count > 0 || wp.incorrect_count > 0 || 
                        wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct;
+                if (hasAny) progressCount++;
+                return hasAny;
             });
+            
+            // Debug: Log progress details for each lesson
+            console.log(`  📊 Lesson ${lessonData.lesson}: E→A=${englishArabicComplete}/${totalWords}, A→E=${arabicEnglishComplete}/${totalWords}, Mixed=${mixedComplete}/${totalWords}, hasProgress=${hasProgress} (${progressCount} words with progress)`);
+            
+            // Extra debug for lessons with progress
+            if (englishArabicComplete > 0 || arabicEnglishComplete > 0 || mixedComplete > 0 || progressCount > 0) {
+                console.log(`     🔍 Lesson ${lessonData.lesson} word details:`);
+                lessonData.items.slice(0, 3).forEach(item => {
+                    const wpDetail = this.progress.wordProgress?.[item.id];
+                    console.log(`        - ${item.id}: found=${!!wpDetail}, data=`, wpDetail || 'NOT FOUND');
+                });
+            }
             
             if (allModesComplete) {
                 status = 'completed';
@@ -1927,8 +1959,15 @@ class VocabTrainer {
         
         // Force sync to Firebase after each question answer
         if (window.firebaseSyncManager?.syncEnabled) {
-            window.firebaseSyncManager.forceSync().catch(err => {
-                console.warn('Background sync after question failed:', err.message);
+            console.log('📤 Syncing progress after question...');
+            window.firebaseSyncManager.forceSync().then(result => {
+                if (result) {
+                    console.log('✅ Progress synced to Firebase after question');
+                } else {
+                    console.log('⚠️ Sync returned false - may need manual sync');
+                }
+            }).catch(err => {
+                console.warn('❌ Background sync after question failed:', err.message);
             });
         }
         

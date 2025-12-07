@@ -327,13 +327,34 @@ class FirebaseSync {
         }
 
         try {
-            const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            // Import with getDocFromServer to bypass cache and get fresh data
+            const { doc, getDocFromServer, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             const userRef = doc(this.db, 'users', this.userId);
-            const userSnap = await getDoc(userRef);
+            
+            let userSnap;
+            try {
+                // Try to get fresh data from server (bypasses cache)
+                console.log('📡 Fetching fresh data from Firestore server...');
+                userSnap = await getDocFromServer(userRef);
+                console.log('✅ Got fresh data from server');
+            } catch (serverError) {
+                // If server fetch fails (offline), fall back to cache
+                console.log('⚠️ Server fetch failed, using cache:', serverError.message);
+                userSnap = await getDoc(userRef);
+            }
 
             if (userSnap.exists()) {
                 const data = userSnap.data();
-                console.log('📥 Progress loaded from Firestore');
+                const wordCount = Object.keys(data.progress?.wordProgress || {}).length;
+                console.log(`📥 Progress loaded from Firestore: ${wordCount} words`);
+                
+                // Log sample of progress for debugging
+                const sampleIds = Object.keys(data.progress?.wordProgress || {}).slice(0, 3);
+                sampleIds.forEach(id => {
+                    const wp = data.progress.wordProgress[id];
+                    console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
+                });
+                
                 return data.progress || null;
             }
             console.log('📭 No progress found in Firestore for this user');
