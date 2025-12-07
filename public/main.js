@@ -85,8 +85,17 @@ class VocabTrainer {
                 // Ensure UI is updated (handleAuthStateChange should have done this, but double-check)
                 this.updateUserUI(user);
                 window.firebaseSyncManager.setUserId(user.uid);
-                // Refresh local cache from Firebase at login (Firebase is source of truth)
-                await this.syncProgressFromServer(true);
+                // On redirect login: Check if first login or merge
+                const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
+                const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
+                                     JSON.parse(hasLocalProgress).wordProgress === undefined ||
+                                     Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
+                
+                if (isFirstLogin) {
+                    await this.syncProgressFromServer(true);
+                } else {
+                    await this.syncProgressFromServer(false);
+                }
                 this.hideLoginView();
                 return true;
             } else {
@@ -174,8 +183,23 @@ class VocabTrainer {
             console.log('✅ User is authenticated in checkAuthState, setting up sync...');
             // User is authenticated, set up sync
             window.firebaseSyncManager.setUserId(user.uid);
-            // Refresh local cache from Firebase at login (Firebase is source of truth)
-            await this.syncProgressFromServer(true);
+            
+            // Check if this is a first-time login or page refresh
+            const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
+            const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
+                                 JSON.parse(hasLocalProgress).wordProgress === undefined ||
+                                 Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
+            
+            if (isFirstLogin) {
+                // First login: Load from Firebase as source of truth
+                console.log('📥 First login detected - loading from Firebase...');
+                await this.syncProgressFromServer(true);
+            } else {
+                // Page refresh: Merge Firebase with local (preserve newer data)
+                console.log('🔄 Page refresh detected - merging Firebase with local progress...');
+                await this.syncProgressFromServer(false);
+            }
+            
             // Ensure UI is updated
             this.updateUserUI(user);
             this.hideLoginView();
@@ -188,9 +212,23 @@ class VocabTrainer {
             console.log('✅ User is authenticated, updating UI and syncing...');
             window.firebaseSyncManager.setUserId(user.uid);
             this.updateUserUI(user);
-            // Refresh local cache from Firebase at login (Firebase is source of truth)
+            
+            // Check if this is a first-time login or page refresh
+            const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
+            const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
+                                 JSON.parse(hasLocalProgress).wordProgress === undefined ||
+                                 Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
+            
             try {
-                await this.syncProgressFromServer(true);
+                if (isFirstLogin) {
+                    // First login: Load from Firebase as source of truth
+                    console.log('📥 First login detected - loading from Firebase...');
+                    await this.syncProgressFromServer(true);
+                } else {
+                    // Page refresh: Merge Firebase with local (preserve newer data)
+                    console.log('🔄 Page refresh detected - merging Firebase with local progress...');
+                    await this.syncProgressFromServer(false);
+                }
             } catch (error) {
                 console.error('Error syncing progress:', error);
             }
@@ -252,10 +290,15 @@ class VocabTrainer {
                     localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                     console.log('✅ Local cache refreshed from Firebase');
                 } else {
-                    // During session: Merge server progress with local (server wins on conflicts)
+                    // During session/page refresh: Merge server progress with local (preserve most progress)
                     console.log('📥 Merging server progress with local...');
-                    this.progress = this.mergeProgress(this.progress, serverProgress);
+                    // Always reload local progress to ensure we have the latest
+                    const localProgress = this.loadProgress();
+                    const mergedProgress = this.mergeProgress(localProgress, serverProgress);
+                    this.progress = mergedProgress;
+                    // Save merged progress (this will sync back to Firebase too)
                     this.saveProgress();
+                    console.log('✅ Progress merged - preserving most advanced progress');
                 }
             } else {
                 console.log('📭 No server progress found, using local storage');
@@ -2158,20 +2201,36 @@ class VocabTrainer {
             }
             
             try {
-                // Save current progress to localStorage first
-                this.saveProgress();
+                // Ensure we have the latest progress from localStorage
+                this.progress = this.loadProgress();
                 
-                // Force immediate sync to Firebase
+                // Save current progress to localStorage first (ensure it's saved)
+                localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                console.log('💾 Progress saved to localStorage before sync');
+                
+                // Force immediate sync to Firebase and wait for completion
+                console.log('🔄 Forcing immediate sync to Firebase...');
                 const synced = await window.firebaseSyncManager.forceSync();
+                
                 if (synced) {
+                    console.log('✅ Sync completed successfully');
                     alert('✅ Progress synced to Firebase successfully!');
                 } else {
-                    // If forceSync returns false, try to sync current progress
+                    // If forceSync returned false, explicitly sync current progress
+                    console.log('⚠️ forceSync returned false, trying explicit sync...');
                     await window.firebaseSyncManager.saveProgress(this.progress);
-                    alert('✅ Progress queued for sync to Firebase.');
+                    // Wait a bit and check if sync completed
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // Force another sync attempt
+                    const retrySync = await window.firebaseSyncManager.forceSync();
+                    if (retrySync) {
+                        alert('✅ Progress synced to Firebase successfully!');
+                    } else {
+                        alert('⚠️ Progress queued for sync. It will sync in the background. Please wait a few seconds before refreshing.');
+                    }
                 }
             } catch (error) {
-                console.error('Error syncing to Firebase:', error);
+                console.error('❌ Error syncing to Firebase:', error);
                 alert('❌ Error syncing to Firebase: ' + (error.message || 'Unknown error'));
             }
         });

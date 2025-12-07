@@ -10,6 +10,7 @@ class FirebaseAuth {
         this.authReady = false;  // Track if initial auth state is determined
         this._authReadyPromise = null;
         this._authReadyResolve = null;
+        this._isExplicitLogin = false;  // Track if user explicitly clicked login button
     }
 
     // Returns a promise that resolves when auth state is first determined
@@ -57,6 +58,8 @@ class FirebaseAuth {
             console.log('✅ Found existing user from persistence:', this.auth.currentUser.email);
             this.user = this.auth.currentUser;
             this._setAuthReady(this.auth.currentUser);
+            // Clear explicit logout flag since user was automatically restored
+            localStorage.removeItem('explicit_logout');
         }
         
         // Set up auth state listener
@@ -73,6 +76,11 @@ class FirebaseAuth {
                     console.log('🎯 First auth state received, setting ready...');
                     this._setAuthReady(user);
                     resolve(user);
+                }
+                
+                // If user is automatically restored (not via explicit login), clear the flag
+                if (user && !this._isExplicitLogin) {
+                    localStorage.removeItem('explicit_logout');
                 }
                 
                 if (this.onAuthStateChanged) {
@@ -122,6 +130,9 @@ class FirebaseAuth {
         }
         
         try {
+            // Mark this as an explicit login (user clicked the button)
+            this._isExplicitLogin = true;
+            
             console.log('🔄 Loading Firebase Auth modules...');
             const { signInWithPopup, GoogleAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
             
@@ -130,9 +141,24 @@ class FirebaseAuth {
             provider.addScope('profile');
             provider.addScope('email');
             
+            // Check if user explicitly logged out - if so, show account picker
+            const explicitLogout = localStorage.getItem('explicit_logout');
+            if (explicitLogout === 'true') {
+                console.log('🔐 Explicit logout detected - showing account picker');
+                provider.setCustomParameters({
+                    prompt: 'select_account'  // Force account selection
+                });
+                // Clear the flag so next automatic login won't show picker
+                localStorage.removeItem('explicit_logout');
+            }
+            
             console.log('🔄 Opening Google sign-in popup...');
             const result = await signInWithPopup(this.auth, provider);
             console.log('✅ Google sign-in successful:', result.user.email);
+            
+            // Reset flag after successful login
+            setTimeout(() => { this._isExplicitLogin = false; }, 1000);
+            
             return result.user;
         } catch (error) {
             console.error('❌ Google sign-in error:', error);
@@ -146,6 +172,16 @@ class FirebaseAuth {
                 const redirectProvider = new GoogleAuthProvider();
                 redirectProvider.addScope('profile');
                 redirectProvider.addScope('email');
+                
+                // Also set account picker for redirect if explicit logout
+                const explicitLogout = localStorage.getItem('explicit_logout');
+                if (explicitLogout === 'true') {
+                    redirectProvider.setCustomParameters({
+                        prompt: 'select_account'
+                    });
+                    localStorage.removeItem('explicit_logout');
+                }
+                
                 await signInWithRedirect(this.auth, redirectProvider);
                 return null;
             }
@@ -189,6 +225,10 @@ class FirebaseAuth {
 
     async signOut() {
         try {
+            // Mark that this is an explicit logout - next login should show account picker
+            localStorage.setItem('explicit_logout', 'true');
+            console.log('🔐 Explicit logout - will show account picker on next login');
+            
             const { signOut } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
             await signOut(this.auth);
         } catch (error) {
