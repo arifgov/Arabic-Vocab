@@ -94,3 +94,4 @@ If PDF extraction doesn't work well, you can manually edit the JSON files:
 
 The `id` format is: `b{book}_l{lesson}_{index}` (e.g., `b1_l1_001`)
 
+

@@ -162,3 +162,4 @@ To test on mobile:
 - No sensitive data stored in localStorage (only progress)
 - Consider enabling App Check for additional security in production
 
+

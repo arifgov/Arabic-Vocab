@@ -71,3 +71,4 @@ Make sure you're serving from the `public/` folder, not the root folder.
 ### CORS errors
 Make sure you're accessing via a web server (http://localhost), not by opening the HTML file directly (file://).
 
+

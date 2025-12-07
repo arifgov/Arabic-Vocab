@@ -116,3 +116,4 @@ const firebaseConfig = {
 - **After Free Tier**: Pay-as-you-go, very affordable for small apps
 - Estimated cost for 1000 users: ~$0-5/month
 
+

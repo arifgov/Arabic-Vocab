@@ -120,3 +120,4 @@ All progress is stored in browser localStorage under the key `madinah_vocab_prog
 
 This project is for personal/educational use.
 
+

@@ -119,3 +119,4 @@ If your PDFs are scanned images, you can use OCR:
 - Check `SERVER_GUIDE.md` for server setup help
 - The app works perfectly with Book 2 right now - you can start learning immediately!
 
+
