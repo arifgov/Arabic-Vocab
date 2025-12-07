@@ -285,56 +285,66 @@ class VocabTrainer {
                 return;
             }
 
-            console.log('📥 Loading progress from Firebase (forcing fresh read)...');
-            const serverProgress = await window.firebaseSyncManager.loadProgress();
-            console.log('📥 Server returned:', serverProgress ? `${Object.keys(serverProgress.wordProgress || {}).length} words` : 'null');
+            // Check local progress FIRST to determine if this is a new device
+            const localProgress = this.loadProgress();
+            const localWordCount = Object.keys(localProgress.wordProgress || {}).length;
+            const isNewDevice = localWordCount === 0;
             
-            if (serverProgress) {
-                // ALWAYS use Firebase as source of truth for cross-device sync
-                // Firebase has the latest data from all devices
-                const localProgress = this.loadProgress();
-                
-                // If this is a new device (no local progress), clear any queued data
-                // This prevents empty/stale queued data from overwriting Firebase
-                const localWordCount = Object.keys(localProgress.wordProgress || {}).length;
-                if (localWordCount === 0 && window.firebaseSyncManager) {
-                    console.log('🧹 New device detected (no local progress), clearing sync queue to prevent data loss');
-                    window.firebaseSyncManager.clearQueue();
+            console.log('📥 Loading progress from Firebase...');
+            console.log('   - Local word count:', localWordCount);
+            console.log('   - Is new device:', isNewDevice);
+            
+            // Clear any sync queue on new device to prevent empty data upload
+            if (isNewDevice && window.firebaseSyncManager) {
+                console.log('🧹 New device - clearing sync queue and pending progress');
+                window.firebaseSyncManager.clearQueue();
+                window.firebaseSyncManager.pendingProgress = null;
+            }
+
+            const serverProgress = await window.firebaseSyncManager.loadProgress();
+            const serverWordCount = Object.keys(serverProgress?.wordProgress || {}).length;
+            
+            console.log('📥 Server returned:', serverProgress ? `${serverWordCount} words` : 'null');
+
+            if (serverProgress && serverWordCount > 0) {
+                if (isNewDevice) {
+                    // NEW DEVICE: Use Firebase data directly (no merge with empty local)
+                    console.log('📥 New device - using Firebase data directly (no merge)');
+                    this.progress = serverProgress;
+                } else {
+                    // EXISTING DEVICE: Merge Firebase + Local, keeping most progress
+                    console.log('📥 Existing device - merging Firebase with local');
+                    this.progress = this.mergeProgress(localProgress, serverProgress);
                 }
                 
-                // Merge: Firebase + Local, taking the MOST progress from either
-                // This ensures we never lose progress from any device
-                const mergedProgress = this.mergeProgress(localProgress, serverProgress);
-                
-                console.log('📊 Merge result:');
-                console.log('   - Local word count:', Object.keys(localProgress.wordProgress || {}).length);
-                console.log('   - Server word count:', Object.keys(serverProgress.wordProgress || {}).length);
-                console.log('   - Merged word count:', Object.keys(mergedProgress.wordProgress || {}).length);
-                
-                this.progress = mergedProgress;
                 this.progress.localModifiedAt = Date.now();
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                console.log('✅ Progress synced from Firebase and merged with local');
                 
-                // If merged data has more progress than server, sync back to Firebase
-                const serverWordCount = Object.keys(serverProgress.wordProgress || {}).length;
-                const mergedWordCount = Object.keys(mergedProgress.wordProgress || {}).length;
-                if (mergedWordCount > serverWordCount) {
+                const finalWordCount = Object.keys(this.progress.wordProgress || {}).length;
+                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words');
+                
+                // Log sample of saved data for verification
+                const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
+                sampleIds.forEach(id => {
+                    const wp = this.progress.wordProgress[id];
+                    console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
+                });
+                
+                // Only sync back if existing device has MORE progress than server
+                if (!isNewDevice && finalWordCount > serverWordCount) {
                     console.log('📤 Local has additional progress, syncing back to Firebase...');
                     window.firebaseSyncManager.saveProgress(this.progress);
                 }
+            } else if (serverProgress === null && localWordCount > 0) {
+                // No server data but we have local data - upload it
+                console.log('📤 No server data, uploading local progress to Firebase...');
+                window.firebaseSyncManager.saveProgress(localProgress);
             } else {
-                console.log('📭 No server progress found, using local storage');
-                // If we have local progress but no server progress, sync to server
-                const localProgress = this.loadProgress();
-                if (Object.keys(localProgress.wordProgress || {}).length > 0) {
-                    console.log('📤 Uploading local progress to Firebase...');
-                    window.firebaseSyncManager.saveProgress(localProgress);
-                }
+                console.log('📭 No progress found (server or local)');
             }
             
-            // Now it's safe to process any queued updates (after we've loaded/merged Firebase data)
-            if (window.firebaseSyncManager?.processQueueAfterLoad) {
+            // Process any queued updates ONLY if this is NOT a new device
+            if (!isNewDevice && window.firebaseSyncManager?.processQueueAfterLoad) {
                 window.firebaseSyncManager.processQueueAfterLoad();
             }
         } catch (error) {
