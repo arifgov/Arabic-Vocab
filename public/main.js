@@ -288,10 +288,19 @@ class VocabTrainer {
             // Check local progress FIRST to determine if this is a new device
             const localProgress = this.loadProgress();
             const localWordCount = Object.keys(localProgress.wordProgress || {}).length;
-            const isNewDevice = localWordCount === 0;
+            
+            // IMPORTANT: Check for ACTUAL progress, not just word entries
+            // initializeProgress() creates entries for ALL words with empty values
+            // So we need to check if any word has real progress
+            const hasActualProgress = Object.values(localProgress.wordProgress || {}).some(wp => 
+                wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+                wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+            );
+            const isNewDevice = !hasActualProgress;
             
             console.log('📥 Loading progress from Firebase...');
-            console.log('   - Local word count:', localWordCount);
+            console.log('   - Local word entries:', localWordCount);
+            console.log('   - Has actual progress:', hasActualProgress);
             console.log('   - Is new device:', isNewDevice);
             
             // Clear any sync queue on new device to prevent empty data upload
