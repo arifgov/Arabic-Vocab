@@ -100,17 +100,80 @@ class FirebaseSync {
     }
     
     async performSync() {
-        if (!this.pendingProgress || this.syncing) {
+        // If already syncing, DON'T return false - schedule a retry instead
+        if (this.syncing) {
+            console.log('⏳ Sync already in progress, will retry after current sync completes');
+            // Schedule a retry after a short delay (the current sync will trigger another check)
+            if (!this.syncTimer && this.pendingProgress) {
+                this.syncTimer = setTimeout(() => {
+                    this.performSync();
+                }, this.syncDelay);
+            }
+            return false;
+        }
+        
+        if (!this.pendingProgress) {
             return false;
         }
 
         this.syncing = true;
         const progressToSync = this.pendingProgress;
         this.pendingProgress = null;
-        this.syncTimer = null;
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
+
+        // Track when this sync started for debugging
+        const syncStartTime = Date.now();
+        const localModifiedAt = progressToSync.localModifiedAt || syncStartTime;
+        
+        // Log detailed sync info for debugging
+        console.log(`🔄 Starting sync:`);
+        console.log(`   - Sync start time: ${new Date(syncStartTime).toLocaleTimeString()}`);
+        console.log(`   - Data modified at: ${new Date(localModifiedAt).toLocaleTimeString()}`);
+        console.log(`   - Word progress keys: ${Object.keys(progressToSync.wordProgress || {}).length}`);
+        
+        // Log a sample of the progress data for debugging
+        const sampleWordIds = Object.keys(progressToSync.wordProgress || {}).slice(0, 3);
+        sampleWordIds.forEach(id => {
+            const wp = progressToSync.wordProgress[id];
+            console.log(`   - Word ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}, Mixed=${wp.mixed_correct}`);
+        });
+        
+        // SANITIZE: Clean the progress data to ensure it's valid for Firestore
+        // Remove undefined values, session-specific fields, and reduce data size
+        const sanitizedProgress = {
+            wordProgress: {},
+            lessonStatus: progressToSync.lessonStatus || { 1: {}, 2: {} },
+            lastBook: progressToSync.lastBook,
+            lastLesson: progressToSync.lastLesson,
+            lastMode: progressToSync.lastMode
+        };
+        
+        // Only sync essential word progress fields (not session-specific ones)
+        // This reduces document size significantly
+        for (const [wordId, wp] of Object.entries(progressToSync.wordProgress || {})) {
+            // Only include words that have some progress
+            if (wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct || 
+                wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0) {
+                sanitizedProgress.wordProgress[wordId] = {
+                    correct_count: wp.correct_count || 0,
+                    incorrect_count: wp.incorrect_count || 0,
+                    consecutive_correct: wp.consecutive_correct || 0,
+                    mastered: wp.mastered || false,
+                    english_arabic_correct: wp.english_arabic_correct || false,
+                    arabic_english_correct: wp.arabic_english_correct || false,
+                    mixed_correct: wp.mixed_correct || false
+                    // Intentionally NOT syncing session_* fields - they're local only
+                };
+            }
+        }
+        
+        console.log(`   - Words with progress to sync: ${Object.keys(sanitizedProgress.wordProgress).length} (filtered from ${Object.keys(progressToSync.wordProgress || {}).length})`);
 
         try {
-            const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { doc, setDoc, getDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             const userRef = doc(this.db, 'users', this.userId);
             
             // Get current user info from Firebase Auth to save email/name
@@ -124,48 +187,57 @@ class FirebaseSync {
                 }
             }
             
-            const updateData = {
-                progress: progressToSync,
-                lastSync: serverTimestamp(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            // Save email and name if available (for admin portal display)
-            if (userEmail) {
-                updateData.email = userEmail;
-            }
-            if (userName) {
-                updateData.name = userName;
-                updateData.displayName = userName;
-            }
-            
-            // First load existing data to preserve email/name, then replace progress completely
-            const { getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            // Load existing data to preserve email/name
             const existingDoc = await getDoc(userRef);
             const existingData = existingDoc.exists() ? existingDoc.data() : {};
             
+            console.log(`   - Server doc exists: ${existingDoc.exists()}`);
+            if (existingData.localTimestamp) {
+                console.log(`   - Server localTimestamp: ${existingData.localTimestamp} (${new Date(existingData.localTimestamp).toLocaleTimeString()})`);
+            }
+            
             // Build complete document - replace progress completely, preserve email/name
             const completeData = {
-                progress: progressToSync, // COMPLETE REPLACEMENT - no merging
+                progress: sanitizedProgress, // COMPLETE REPLACEMENT - no merging (sanitized to remove undefined)
                 lastSync: serverTimestamp(),
                 updatedAt: new Date().toISOString(),
+                localTimestamp: syncStartTime, // Use sync start time as the version
                 // Preserve email/name from existing or use current user info
                 email: userEmail || existingData.email || null,
                 name: userName || existingData.name || existingData.displayName || null,
                 displayName: userName || existingData.displayName || existingData.name || null
             };
             
+            console.log('   - Sanitized progress word count:', Object.keys(sanitizedProgress.wordProgress).length);
+            
             // Replace entire document - this ensures progress is completely overwritten
+            console.log('   - About to write to Firestore...');
             await setDoc(userRef, completeData);
 
             this.lastSyncTime = Date.now();
-            console.log('✅ Progress synced to Firestore');
+            console.log(`✅ Progress synced to Firestore (syncStartTime: ${syncStartTime})`);
             this.syncing = false;
+            
+            // CRITICAL: Check if new progress arrived while we were syncing
+            // This prevents lost updates when user answers questions rapidly
+            if (this.pendingProgress) {
+                console.log('📤 New progress arrived during sync, syncing again...');
+                // Use setTimeout to avoid stack overflow with rapid updates
+                setTimeout(() => this.performSync(), 50);
+            }
+            
             return true;
         } catch (error) {
             // Check for specific Firestore errors
+            let shouldRetry = true;
+            
             if (error.code === 'permission-denied') {
                 console.warn('⚠️ Firestore permission denied. Check your security rules.');
+                shouldRetry = false; // Don't retry permission errors
+            } else if (error.code === 'invalid-argument') {
+                console.warn('⚠️ Firestore invalid-argument error. Data may be too large or contain invalid values.');
+                console.warn('   - Progress words count:', Object.keys(sanitizedProgress.wordProgress || {}).length);
+                shouldRetry = false; // Don't retry invalid data errors - they'll just fail again
             } else if (error.code === 'unavailable') {
                 console.warn('⚠️ Firestore unavailable. Progress will be synced when connection is restored.');
             } else if (error.code === 'resource-exhausted') {
@@ -175,38 +247,77 @@ class FirebaseSync {
             } else {
                 console.warn('⚠️ Error saving progress to Firestore:', error.code || error.message);
             }
-            // Queue for retry
-            this.syncQueue.push(progressToSync);
+            
             this.syncing = false;
+            
+            // Only queue for retry on retryable errors
+            if (shouldRetry) {
+                this.syncQueue.push(progressToSync);
+                // Schedule a retry for queued items
+                setTimeout(() => this.processSyncQueue(), 1000);
+            }
+            
             return false;
         }
     }
     
     // Force immediate sync (e.g., when leaving a view or manual sync)
     async forceSync() {
-        if (this.syncTimer) {
-            clearTimeout(this.syncTimer);
-            this.syncTimer = null;
-        }
-        // If there's pending progress, sync it immediately
-        if (this.pendingProgress) {
-            return this.performSync();
-        }
-        // If no pending progress but we have a userId, try to load current progress and sync
-        // This handles manual sync requests
+        console.log('🔄 forceSync called:');
+        console.log('   - syncEnabled:', this.syncEnabled);
+        console.log('   - userId:', this.userId);
+        console.log('   - syncing:', this.syncing);
+        console.log('   - pendingProgress:', !!this.pendingProgress);
+        console.log('   - db:', !!this.db);
+        
+        // Always load fresh data from localStorage for manual sync
+        // This ensures we sync the absolute latest state
         if (this.syncEnabled && this.userId) {
-            // Try to get current progress from the app
             const currentProgress = localStorage.getItem('madinah_vocab_progress');
             if (currentProgress) {
                 try {
                     const progressData = JSON.parse(currentProgress);
                     this.pendingProgress = progressData;
-                    return this.performSync();
+                    console.log('📦 Loaded fresh progress from localStorage for sync');
+                    console.log('   - Word progress entries:', Object.keys(progressData.wordProgress || {}).length);
+                    console.log('   - localModifiedAt:', progressData.localModifiedAt);
                 } catch (e) {
                     console.error('Error parsing progress for sync:', e);
                 }
+            } else {
+                console.warn('⚠️ No progress found in localStorage!');
+            }
+        } else {
+            console.warn('⚠️ Sync not enabled or no userId:', { syncEnabled: this.syncEnabled, userId: this.userId });
+        }
+        
+        // If a sync is already in progress, wait for it to complete then sync again
+        if (this.syncing) {
+            console.log('⏳ Sync in progress, waiting for completion...');
+            // Wait for current sync to complete (up to 10 seconds)
+            let waitCount = 0;
+            while (this.syncing && waitCount < 100) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                waitCount++;
+            }
+            if (this.syncing) {
+                console.warn('⚠️ Sync still in progress after 10s, forcing new sync anyway');
+                this.syncing = false;
             }
         }
+        
+        // Clear any pending timer since we're forcing sync now
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
+        
+        // If there's pending progress, sync it immediately
+        if (this.pendingProgress) {
+            return this.performSync();
+        }
+        
+        console.log('📭 No progress to sync');
         return false;
     }
 

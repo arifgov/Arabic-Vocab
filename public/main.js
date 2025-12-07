@@ -310,7 +310,7 @@ class VocabTrainer {
             const serverProgress = await window.firebaseSyncManager.loadProgress();
             if (serverProgress) {
                 if (refreshFromFirebase) {
-                    // At login: Use Firebase as source of truth, replace local cache
+                    // First login: Use Firebase as source of truth, replace local cache
                     console.log('📥 Refreshing local cache from Firebase (source of truth)...');
                     this.progress = serverProgress;
                     localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
@@ -322,9 +322,16 @@ class VocabTrainer {
                     const localProgress = this.loadProgress();
                     const mergedProgress = this.mergeProgress(localProgress, serverProgress);
                     this.progress = mergedProgress;
-                    // Save merged progress (this will sync back to Firebase too)
-                    this.saveProgress();
-                    console.log('✅ Progress merged - preserving most advanced progress');
+                    
+                    // CRITICAL FIX: Only save to localStorage, DON'T trigger Firebase sync
+                    // This prevents race condition where page refresh during active sync
+                    // could cause old data to overwrite new data
+                    // The next user action or manual sync will sync the correct merged data
+                    
+                    // Add timestamp to merged data so manual sync will have correct timestamp
+                    this.progress.localModifiedAt = Date.now();
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                    console.log('✅ Progress merged and saved to localStorage (not syncing to avoid race condition)');
                 }
             } else {
                 console.log('📭 No server progress found, using local storage');
@@ -488,9 +495,13 @@ class VocabTrainer {
             this.progress = this.loadProgress();
         }
         try {
+            // Add a local timestamp to track when this data was last modified
+            // This helps with optimistic concurrency when syncing
+            this.progress.localModifiedAt = Date.now();
+            
             // Save to localStorage first (immediate, reliable)
             localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-            console.log('💾 Progress saved to localStorage');
+            console.log('💾 Progress saved to localStorage (timestamp:', this.progress.localModifiedAt, ')');
             
             // Sync to Firestore if authenticated - but don't wait for it
             // Local storage is the immediate source of truth during active sessions
@@ -745,15 +756,45 @@ class VocabTrainer {
         this.setWordProgress(id, wp);
     }
     
-    // Check if lesson has passed final test
-    hasPassedFinalTest(book, lesson) {
-        const status = this.getLessonStatus(book, lesson);
-        const passed = status.final_test_passed || false;
-        console.log(`  🔍 hasPassedFinalTest(Book ${book}, Lesson ${lesson}): ${passed}`, status);
-        return passed;
+    // Check if all 3 modes are complete for a lesson
+    areAllModesComplete(book, lesson) {
+        const lessonData = this.books[book]?.find(l => l.lesson === lesson);
+        if (!lessonData) return false;
+        
+        const totalWords = lessonData.items.length;
+        const mixedTarget = Math.ceil(totalWords * 0.75); // Mixed only needs 75%
+        
+        let englishArabicComplete = 0;
+        let arabicEnglishComplete = 0;
+        let mixedComplete = 0;
+        
+        lessonData.items.forEach(item => {
+            const wp = this.getWordProgress(item.id);
+            if (wp.english_arabic_correct) englishArabicComplete++;
+            if (wp.arabic_english_correct) arabicEnglishComplete++;
+            if (wp.mixed_correct) mixedComplete++;
+        });
+        
+        const allComplete = englishArabicComplete === totalWords && 
+                           arabicEnglishComplete === totalWords && 
+                           mixedComplete >= mixedTarget;
+        
+        console.log(`  🔍 areAllModesComplete(Book ${book}, Lesson ${lesson}): ${allComplete}`, {
+            englishArabic: `${englishArabicComplete}/${totalWords}`,
+            arabicEnglish: `${arabicEnglishComplete}/${totalWords}`,
+            mixed: `${mixedComplete}/${mixedTarget}`
+        });
+        
+        return allComplete;
     }
     
-    // Check if lesson is ready for final test (all words mastered)
+    // Legacy: Check if lesson has passed final test (for backwards compatibility)
+    hasPassedFinalTest(book, lesson) {
+        // Now checks if all 3 modes are complete instead of a separate final test
+        return this.areAllModesComplete(book, lesson);
+    }
+    
+    // Check if lesson is ready for final test (all words mastered) - kept for compatibility
     isReadyForFinalTest(book, lesson) {
         const lessonData = this.books[book].find(l => l.lesson === lesson);
         if (!lessonData) return false;
@@ -762,8 +803,8 @@ class VocabTrainer {
     }
     
     isLessonMastered(book, lesson) {
-        // Lesson is mastered only if final test is passed
-        return this.hasPassedFinalTest(book, lesson);
+        // Lesson is mastered when all 3 modes are complete
+        return this.areAllModesComplete(book, lesson);
     }
     
     updateLessonMastery(book, lesson) {
@@ -871,11 +912,9 @@ class VocabTrainer {
         
         this.updateLessonProgress(book, lesson);
         
-        // Show/hide final test button
+        // Hide final test button (no longer used - completion is based on 3 modes)
         const finalTestBtn = document.getElementById('final-test-btn');
-        if (this.isReadyForFinalTest(book, lesson) && !this.hasPassedFinalTest(book, lesson)) {
-            finalTestBtn.style.display = 'block';
-        } else {
+        if (finalTestBtn) {
             finalTestBtn.style.display = 'none';
         }
         
@@ -1115,7 +1154,18 @@ class VocabTrainer {
         }
     }
     
-    showSummaryView() {
+    async showSummaryView() {
+        // Force sync to Firebase when test is completed
+        if (window.firebaseSyncManager?.syncEnabled) {
+            console.log('📤 Test completed - forcing sync to Firebase...');
+            try {
+                await window.firebaseSyncManager.forceSync();
+                console.log('✅ Progress synced after test completion');
+            } catch (err) {
+                console.warn('⚠️ Sync after test completion failed:', err.message);
+            }
+        }
+        
         // Check if this was a final test BEFORE showing summary
         if (this.isFinalTest) {
             const totalQuestions = this.sessionStats.attempted;
@@ -1212,16 +1262,18 @@ class VocabTrainer {
             });
             
             // A test is complete if all words are correct for that mode
+            // Mixed mode only requires 75% of words to be complete
+            const mixedTarget = Math.ceil(totalWords * 0.75);
             let testsCompleted = 0;
             if (englishArabicComplete === totalWords) testsCompleted++;
             if (arabicEnglishComplete === totalWords) testsCompleted++;
-            if (mixedComplete === totalWords) testsCompleted++;
+            if (mixedComplete >= mixedTarget) testsCompleted++;
             
             let status = 'locked';
             let statusText = 'Locked';
             
-            const finalTestPassed = this.hasPassedFinalTest(this.currentBook, lessonData.lesson);
-            const readyForTest = this.isReadyForFinalTest(this.currentBook, lessonData.lesson);
+            // Check if all 3 modes are complete
+            const allModesComplete = this.areAllModesComplete(this.currentBook, lessonData.lesson);
             
             // Check if there's any actual progress (words attempted)
             const hasProgress = lessonData.items.some(item => {
@@ -1229,14 +1281,10 @@ class VocabTrainer {
                 return wp.correct_count > 0 || wp.incorrect_count > 0;
             });
             
-            if (finalTestPassed) {
+            if (allModesComplete) {
                 status = 'completed';
                 statusText = 'Completed';
                 card.classList.add('completed');
-            } else if (readyForTest) {
-                status = 'in-progress';
-                statusText = 'Final Test Ready';
-                card.classList.add('in-progress');
             } else if (unlocked && hasProgress) {
                 // Only show "In Progress" if unlocked AND there's actual progress
                 status = 'in-progress';
@@ -1322,9 +1370,11 @@ class VocabTrainer {
                 });
                 
                 // A test is complete if all words are correct
+                // Mixed mode only requires 75% of words to be complete
+                const mixedTarget = Math.ceil(totalWords * 0.75);
                 if (englishArabicComplete === totalWords) totalTestsCompleted++;
                 if (arabicEnglishComplete === totalWords) totalTestsCompleted++;
-                if (mixedComplete === totalWords) totalTestsCompleted++;
+                if (mixedComplete >= mixedTarget) totalTestsCompleted++;
             });
         }
         
@@ -1354,8 +1404,9 @@ class VocabTrainer {
         // Update Arabic-English progress
         this.updateModeProgress('arabic-english', arabicEnglishProgress, total);
         
-        // Update Mixed progress
-        this.updateModeProgress('mixed', mixedProgress, total);
+        // Update Mixed progress - Mixed mode only requires 75% of words
+        const mixedTarget = Math.ceil(total * 0.75);
+        this.updateModeProgress('mixed', mixedProgress, mixedTarget);
     }
     
     calculateModeProgress(items, mode) {
@@ -1486,7 +1537,7 @@ class VocabTrainer {
         return pool;
     }
     
-    nextQuestion() {
+    async nextQuestion() {
         // Check if we've completed all questions
         if (this.questionPool.length === 0) {
             // If final test failed (made a mistake), restart it
@@ -1510,8 +1561,8 @@ class VocabTrainer {
                 this.totalQuestions = this.questionPool.length;
                 // Continue to next question
             } else {
-                // Session complete - show summary
-                this.showSummaryView();
+                // Session complete - show summary and sync to Firebase
+                await this.showSummaryView();
                 return;
             }
         }
@@ -1857,6 +1908,13 @@ class VocabTrainer {
         
         // Save session state after each answer (for resume functionality)
         this.saveSessionState();
+        
+        // Force sync to Firebase after each question answer
+        if (window.firebaseSyncManager?.syncEnabled) {
+            window.firebaseSyncManager.forceSync().catch(err => {
+                console.warn('Background sync after question failed:', err.message);
+            });
+        }
         
         // Update lesson mastery (for final test eligibility)
         if (this.isReadyForFinalTest(this.currentBook, this.currentLesson)) {
@@ -2230,12 +2288,32 @@ class VocabTrainer {
                 // Ensure we have the latest progress from localStorage
                 this.progress = this.loadProgress();
                 
+                // DEBUG: Log the progress data being synced
+                console.log('📊 MANUAL SYNC - Progress data to sync:');
+                console.log('   - Total word progress entries:', Object.keys(this.progress.wordProgress || {}).length);
+                
+                // Count completed items for Book 1, Lesson 2 (IDs start with b1_l2_)
+                const b1l2Words = Object.entries(this.progress.wordProgress || {})
+                    .filter(([id]) => id.startsWith('b1_l2_'));
+                const eaComplete = b1l2Words.filter(([, wp]) => wp.english_arabic_correct).length;
+                const aeComplete = b1l2Words.filter(([, wp]) => wp.arabic_english_correct).length;
+                const mixedComplete = b1l2Words.filter(([, wp]) => wp.mixed_correct).length;
+                console.log(`   - Book 1 Lesson 2: E→A=${eaComplete}/8, A→E=${aeComplete}/8, Mixed=${mixedComplete}/8`);
+                
+                // Add timestamp if not present
+                if (!this.progress.localModifiedAt) {
+                    this.progress.localModifiedAt = Date.now();
+                }
+                
                 // Save current progress to localStorage first (ensure it's saved)
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                 console.log('💾 Progress saved to localStorage before sync');
                 
                 // Force immediate sync to Firebase and wait for completion
                 console.log('🔄 Forcing immediate sync to Firebase...');
+                console.log('   - syncEnabled:', window.firebaseSyncManager.syncEnabled);
+                console.log('   - userId:', window.firebaseSyncManager.userId);
+                
                 const synced = await window.firebaseSyncManager.forceSync();
                 
                 if (synced) {

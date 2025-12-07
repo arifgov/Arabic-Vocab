@@ -286,13 +286,21 @@ class AdminPortal {
         }).length;
         
         const totalWords = lessonWords.length;
-        const finalTestPassed = status.final_test_passed === true;
+        
+        // Mixed mode only asks 75% of words, so that's the target for completion
+        const mixedTarget = Math.ceil(totalWords * 0.75);
+        const mixedComplete = mixedCount >= mixedTarget;
+        
+        // Check if all 3 modes are complete
+        const allComplete = englishArabicCount === totalWords && 
+                           arabicEnglishCount === totalWords && 
+                           mixedComplete;
 
         return `
             <div class="admin-lesson-card">
                 <div class="admin-lesson-header">
                     <h4>${this.escapeHtml(lesson.lesson_label)}</h4>
-                    ${finalTestPassed ? '<span class="admin-badge admin-badge-complete">Final Test Passed</span>' : ''}
+                    ${allComplete ? '<span class="admin-badge admin-badge-complete">All Modes Complete</span>' : ''}
                 </div>
                 
                 <div class="admin-lesson-progress">
@@ -321,26 +329,14 @@ class AdminPortal {
                     </div>
                     
                     <div class="admin-mode-progress">
-                        <span>Mixed:</span>
-                        <span>${mixedCount} / ${totalWords}</span>
+                        <span>Mixed (75%):</span>
+                        <span>${mixedCount} / ${mixedTarget}</span>
                         <button class="btn btn-sm btn-mark-complete" 
                                 data-book="${bookNum}" 
                                 data-lesson="${lesson.lesson}" 
                                 data-mode="mixed"
-                                ${mixedCount === totalWords ? 'disabled' : ''}>
-                            ${mixedCount === totalWords ? '✓ Complete' : 'Mark Complete'}
-                        </button>
-                    </div>
-                    
-                    <div class="admin-mode-progress">
-                        <span>Final Test:</span>
-                        <span>${finalTestPassed ? 'Passed' : 'Not Passed'}</span>
-                        <button class="btn btn-sm btn-mark-complete" 
-                                data-book="${bookNum}" 
-                                data-lesson="${lesson.lesson}" 
-                                data-mode="final-test"
-                                ${finalTestPassed ? 'disabled' : ''}>
-                            ${finalTestPassed ? '✓ Passed' : 'Mark as Passed'}
+                                ${mixedComplete ? 'disabled' : ''}>
+                            ${mixedComplete ? '✓ Complete' : 'Mark Complete'}
                         </button>
                     </div>
                 </div>
@@ -375,40 +371,34 @@ class AdminPortal {
             return;
         }
 
-        if (mode === 'final-test') {
-            // Mark final test as passed
-            progress.lessonStatus[book][lesson].final_test_passed = true;
-            progress.lessonStatus[book][lesson].date_completed = new Date().toISOString();
-        } else {
-            // Mark all words in the lesson as complete for the specified mode
-            lessonData.items.forEach(item => {
-                if (!progress.wordProgress[item.id]) {
-                    progress.wordProgress[item.id] = {
-                        correct_count: 0,
-                        incorrect_count: 0,
-                        consecutive_correct: 0,
-                        mastered: false,
-                        english_arabic_correct: false,
-                        arabic_english_correct: false,
-                        mixed_correct: false
-                    };
-                }
-                
-                const wp = progress.wordProgress[item.id];
-                if (mode === 'english-arabic') {
-                    wp.english_arabic_correct = true;
-                } else if (mode === 'arabic-english') {
-                    wp.arabic_english_correct = true;
-                } else if (mode === 'mixed') {
-                    wp.mixed_correct = true;
-                }
-                
-                // Check if all modes are complete
-                if (wp.english_arabic_correct && wp.arabic_english_correct && wp.mixed_correct) {
-                    wp.mastered = true;
-                }
-            });
-        }
+        // Mark all words in the lesson as complete for the specified mode
+        lessonData.items.forEach(item => {
+            if (!progress.wordProgress[item.id]) {
+                progress.wordProgress[item.id] = {
+                    correct_count: 0,
+                    incorrect_count: 0,
+                    consecutive_correct: 0,
+                    mastered: false,
+                    english_arabic_correct: false,
+                    arabic_english_correct: false,
+                    mixed_correct: false
+                };
+            }
+            
+            const wp = progress.wordProgress[item.id];
+            if (mode === 'english-arabic') {
+                wp.english_arabic_correct = true;
+            } else if (mode === 'arabic-english') {
+                wp.arabic_english_correct = true;
+            } else if (mode === 'mixed') {
+                wp.mixed_correct = true;
+            }
+            
+            // Check if all modes are complete
+            if (wp.english_arabic_correct && wp.arabic_english_correct && wp.mixed_correct) {
+                wp.mastered = true;
+            }
+        });
 
         // Save to Firebase immediately
         try {
@@ -459,7 +449,7 @@ document.addEventListener('click', async (e) => {
         const lesson = parseInt(e.target.getAttribute('data-lesson'));
         const mode = e.target.getAttribute('data-mode');
         
-        if (confirm(`Mark ${mode === 'final-test' ? 'Final Test' : mode} as complete for Book ${book}, ${mode === 'final-test' ? '' : 'Lesson ' + lesson}?`)) {
+        if (confirm(`Mark ${mode} as complete for Book ${book}, Lesson ${lesson}?`)) {
             await window.adminPortal.markTestComplete(book, lesson, mode);
         }
     }
