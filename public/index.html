@@ -82,6 +82,8 @@
                         <button id="reset-all-menu-btn" class="dropdown-item" style="display: none;">Reset All Progress</button>
                         <button id="sync-to-firebase-btn" class="dropdown-item" style="display: none;">Sync to Firebase Now</button>
                         <button id="clear-cache-btn" class="dropdown-item" style="display: none;">Clear Cache & Sync from Firebase</button>
+                        <div class="dropdown-divider" id="admin-divider" style="display: none;"></div>
+                        <button id="admin-portal-btn" class="dropdown-item" style="display: none;">🛡️ Admin Portal</button>
                         <div class="dropdown-divider"></div>
                         <button id="logout-btn" class="dropdown-item">Logout</button>
                     </div>
@@ -289,9 +291,32 @@
         </div>
     </div>
     
+    <!-- Admin View -->
+    <div id="admin-view" class="view">
+        <header class="page-header">
+            <div class="breadcrumb">
+                <button id="admin-back-to-dashboard" class="breadcrumb-link">← Dashboard</button>
+                <span class="breadcrumb-separator">/</span>
+                <span class="breadcrumb-current">Admin Portal</span>
+            </div>
+            <h1>🛡️ Admin Portal</h1>
+            <p class="page-subtitle">Manage user progress and test completion</p>
+        </header>
+        
+        <div id="admin-content">
+            <div id="admin-loading" class="admin-loading">
+                <p>Loading users...</p>
+            </div>
+            <div id="admin-error" class="admin-error" style="display: none;"></div>
+            <div id="admin-users-list" class="admin-users-list" style="display: none;"></div>
+            <div id="admin-user-detail" class="admin-user-detail" style="display: none;"></div>
+        </div>
+    </div>
+    
     <script src="firebase-auth.js"></script>
     <script src="firebase-sync.js"></script>
     <script src="main.js"></script>
+    <script src="admin.js"></script>
     <script>
         // Register service worker
         if ('serviceWorker' in navigator) {

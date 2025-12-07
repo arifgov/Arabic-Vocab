@@ -53,6 +53,11 @@ class VocabTrainer {
             await this.showDashboard();
         } else if (state.view === 'lesson' && state.book && state.lesson) {
             await this.showLessonView(state.book, state.lesson);
+        } else if (state.view === 'admin') {
+            if (window.adminPortal) {
+                await window.adminPortal.init();
+                await window.adminPortal.showAdminView();
+            }
         }
         // Don't navigate to question or summary views from history
     }
@@ -71,6 +76,20 @@ class VocabTrainer {
         
         await this.loadData();
         this.setupEventListeners();
+        
+        // Check if we should show admin view (direct URL access)
+        if (window.location.pathname === '/admin' || window.location.hash === '#/admin') {
+            if (window.adminPortal) {
+                await window.adminPortal.init();
+                const user = window.firebaseAuthManager?.getCurrentUser();
+                if (user && window.adminPortal.isAdmin(user)) {
+                    await window.adminPortal.showAdminView();
+                    this.pushHistoryState('admin');
+                    return;
+                }
+            }
+        }
+        
         await this.showDashboard();
         this.updateGlobalStats();
     }
@@ -261,12 +280,19 @@ class VocabTrainer {
         const userAvatar = document.getElementById('user-avatar');
         const dropdownUserName = document.getElementById('dropdown-user-name');
         const dropdownUserEmail = document.getElementById('dropdown-user-email');
+        const adminBtn = document.getElementById('admin-portal-btn');
+        const adminDivider = document.getElementById('admin-divider');
         
         if (userMenu) userMenu.style.display = 'flex';
         if (userName) userName.textContent = user.displayName || 'User';
         if (userAvatar) userAvatar.textContent = user.displayName?.[0]?.toUpperCase() || '👤';
         if (dropdownUserName) dropdownUserName.textContent = user.displayName || 'User';
         if (dropdownUserEmail) dropdownUserEmail.textContent = user.email || '';
+        
+        // Show admin portal button if user is admin
+        const isAdmin = user.email === 'arif@govani.org';
+        if (adminBtn) adminBtn.style.display = isAdmin ? 'block' : 'none';
+        if (adminDivider) adminDivider.style.display = isAdmin ? 'block' : 'none';
     }
     
     hideUserUI() {
@@ -2244,6 +2270,33 @@ class VocabTrainer {
                 await this.clearLocalCacheAndSync();
             }
         });
+        
+        // Admin portal button
+        const adminPortalBtn = document.getElementById('admin-portal-btn');
+        if (adminPortalBtn) {
+            adminPortalBtn.addEventListener('click', async () => {
+                const dropdown = document.getElementById('user-dropdown');
+                if (dropdown) dropdown.style.display = 'none';
+                
+                if (window.adminPortal) {
+                    await window.adminPortal.init();
+                    const success = await window.adminPortal.showAdminView();
+                    if (success) {
+                        this.pushHistoryState('admin');
+                    }
+                }
+            });
+        }
+        
+        // Admin back button
+        const adminBackBtn = document.getElementById('admin-back-to-dashboard');
+        if (adminBackBtn) {
+            adminBackBtn.addEventListener('click', async () => {
+                await this.showDashboard();
+                this.updateGlobalStats();
+                this.pushHistoryState('dashboard');
+            });
+        }
     }
     
     // Authentication handlers

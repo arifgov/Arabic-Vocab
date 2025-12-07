@@ -141,14 +141,23 @@ Make sure your Firestore rules are set for production:
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Select your project
 3. Go to **Firestore Database** > **Rules**
-4. Use these rules:
+4. Use these rules (includes admin portal access):
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can only read/write their own data
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'arif@govani.org';
+    }
+    
+    // Users collection
     match /users/{userId} {
+      // Admin can read/write any user's data
+      allow read, write: if isAdmin();
+      
+      // Regular users can only read/write their own data
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
@@ -156,6 +165,8 @@ service cloud.firestore {
 ```
 
 Click **Publish**.
+
+**Note**: These rules allow the admin user (`arif@govani.org`) to access all user data for the admin portal functionality.
 
 ## Step 10: Verify Deployment
 

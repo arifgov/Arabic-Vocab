@@ -25,7 +25,45 @@ class FirebaseSync {
         this.userId = userId;
         this.syncEnabled = !!userId;
         if (this.syncEnabled) {
+            // Save user email/name to Firestore when user ID is set
+            this.saveUserInfo();
             this.processSyncQueue();
+        }
+    }
+    
+    async saveUserInfo() {
+        if (!this.syncEnabled || !this.userId || !this.db) {
+            return;
+        }
+        
+        try {
+            // Get current user info from Firebase Auth
+            let userEmail = null;
+            let userName = null;
+            if (window.firebaseAuth) {
+                const currentUser = window.firebaseAuth.currentUser;
+                if (currentUser && currentUser.uid === this.userId) {
+                    userEmail = currentUser.email;
+                    userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'User';
+                }
+            }
+            
+            if (userEmail) {
+                const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                const userRef = doc(this.db, 'users', this.userId);
+                
+                // Update user info without overwriting progress
+                await setDoc(userRef, {
+                    email: userEmail,
+                    name: userName,
+                    displayName: userName,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+                
+                console.log('✅ User info saved to Firestore:', userEmail);
+            }
+        } catch (error) {
+            console.warn('⚠️ Error saving user info:', error);
         }
     }
 
@@ -75,11 +113,50 @@ class FirebaseSync {
             const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             const userRef = doc(this.db, 'users', this.userId);
             
-            await setDoc(userRef, {
+            // Get current user info from Firebase Auth to save email/name
+            let userEmail = null;
+            let userName = null;
+            if (window.firebaseAuth) {
+                const currentUser = window.firebaseAuth.currentUser;
+                if (currentUser) {
+                    userEmail = currentUser.email;
+                    userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'User';
+                }
+            }
+            
+            const updateData = {
                 progress: progressToSync,
                 lastSync: serverTimestamp(),
                 updatedAt: new Date().toISOString()
-            }, { merge: true });
+            };
+            
+            // Save email and name if available (for admin portal display)
+            if (userEmail) {
+                updateData.email = userEmail;
+            }
+            if (userName) {
+                updateData.name = userName;
+                updateData.displayName = userName;
+            }
+            
+            // First load existing data to preserve email/name, then replace progress completely
+            const { getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const existingDoc = await getDoc(userRef);
+            const existingData = existingDoc.exists() ? existingDoc.data() : {};
+            
+            // Build complete document - replace progress completely, preserve email/name
+            const completeData = {
+                progress: progressToSync, // COMPLETE REPLACEMENT - no merging
+                lastSync: serverTimestamp(),
+                updatedAt: new Date().toISOString(),
+                // Preserve email/name from existing or use current user info
+                email: userEmail || existingData.email || null,
+                name: userName || existingData.name || existingData.displayName || null,
+                displayName: userName || existingData.displayName || existingData.name || null
+            };
+            
+            // Replace entire document - this ensures progress is completely overwritten
+            await setDoc(userRef, completeData);
 
             this.lastSyncTime = Date.now();
             console.log('✅ Progress synced to Firestore');

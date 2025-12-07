@@ -1517,3 +1517,216 @@ html {
         padding-right: max(1rem, env(safe-area-inset-right));
     }
 }
+
+/* Admin Portal Styles */
+#admin-view {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    min-height: calc(100vh - var(--nav-height));
+}
+
+#admin-content {
+    width: 100%;
+}
+
+.admin-loading, .admin-error {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-light);
+}
+
+.admin-error .error-message {
+    color: var(--danger-color);
+    background: var(--danger-light);
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+}
+
+.admin-no-users {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-light);
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.admin-header h2 {
+    font-size: 1.75rem;
+    color: var(--text-color);
+}
+
+.admin-users-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 100%;
+}
+
+.admin-users-list {
+    width: 100%;
+    max-width: 100%;
+}
+
+.admin-user-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    transition: all 0.3s;
+}
+
+.admin-user-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.admin-user-info h3 {
+    font-size: 1.25rem;
+    color: var(--text-color);
+    margin-bottom: 0.5rem;
+}
+
+.admin-user-email {
+    color: var(--text-light);
+    font-size: 0.9375rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-user-sync {
+    color: var(--text-light);
+    font-size: 0.875rem;
+}
+
+.admin-user-actions {
+    margin-top: 1rem;
+}
+
+.btn-view-progress {
+    width: 100%;
+}
+
+.admin-user-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.admin-user-detail-header h2 {
+    font-size: 1.75rem;
+    color: var(--text-color);
+}
+
+.admin-books-container {
+    display: grid;
+    gap: 2rem;
+}
+
+.admin-book-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.admin-book-card h3 {
+    font-size: 1.5rem;
+    color: var(--text-color);
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.admin-lessons-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-lesson-card {
+    background: var(--bg-color);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.admin-lesson-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.admin-lesson-header h4 {
+    font-size: 1.125rem;
+    color: var(--text-color);
+}
+
+.admin-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.admin-badge-complete {
+    background: var(--success-light);
+    color: var(--success-color);
+}
+
+.admin-lesson-progress {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-mode-progress {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem;
+    background: white;
+    border-radius: var(--radius-sm);
+}
+
+.admin-mode-progress span:first-child {
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.admin-mode-progress span:last-of-type {
+    color: var(--text-light);
+    font-size: 0.9375rem;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.btn-mark-complete:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--success-color);
+}
+
+@media (max-width: 768px) {
+    .admin-users-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .admin-mode-progress {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .admin-mode-progress span {
+        text-align: center;
+    }
+}

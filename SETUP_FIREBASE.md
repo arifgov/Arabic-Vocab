@@ -39,8 +39,17 @@ Go to **Firestore Database** > **Rules** and use:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can only read/write their own data
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'arif@govani.org';
+    }
+    
+    // Users collection
     match /users/{userId} {
+      // Admin can read/write any user's data (for admin portal)
+      allow read, write: if isAdmin();
+      
+      // Regular users can only read/write their own data
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
@@ -48,6 +57,8 @@ service cloud.firestore {
 ```
 
 Click "Publish"
+
+**Note**: These rules allow the admin user (`arif@govani.org`) to access all user data for the admin portal. See `FIRESTORE_RULES.md` for more details.
 
 ## Step 4: Get Firebase Configuration
 
