@@ -117,3 +117,4 @@ const firebaseConfig = {
 - Estimated cost for 1000 users: ~$0-5/month
 
 
+

@@ -120,3 +120,4 @@ If your PDFs are scanned images, you can use OCR:
 - The app works perfectly with Book 2 right now - you can start learning immediately!
 
 
+
