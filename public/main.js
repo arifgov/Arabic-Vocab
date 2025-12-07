@@ -479,7 +479,12 @@ class VocabTrainer {
         }
         
         if (initialized) {
-            this.saveProgress();
+            // IMPORTANT: Only save to localStorage, do NOT sync to Firebase!
+            // This prevents empty default entries from overwriting real progress in Firebase.
+            // Firebase should only be synced when user makes actual progress.
+            this.progress.localModifiedAt = Date.now();
+            localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+            console.log('💾 Initialized local word entries (NOT syncing to Firebase)');
         }
     }
     
