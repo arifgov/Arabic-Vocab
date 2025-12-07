@@ -294,6 +294,14 @@ class VocabTrainer {
                 // Firebase has the latest data from all devices
                 const localProgress = this.loadProgress();
                 
+                // If this is a new device (no local progress), clear any queued data
+                // This prevents empty/stale queued data from overwriting Firebase
+                const localWordCount = Object.keys(localProgress.wordProgress || {}).length;
+                if (localWordCount === 0 && window.firebaseSyncManager) {
+                    console.log('🧹 New device detected (no local progress), clearing sync queue to prevent data loss');
+                    window.firebaseSyncManager.clearQueue();
+                }
+                
                 // Merge: Firebase + Local, taking the MOST progress from either
                 // This ensures we never lose progress from any device
                 const mergedProgress = this.mergeProgress(localProgress, serverProgress);
@@ -323,6 +331,11 @@ class VocabTrainer {
                     console.log('📤 Uploading local progress to Firebase...');
                     window.firebaseSyncManager.saveProgress(localProgress);
                 }
+            }
+            
+            // Now it's safe to process any queued updates (after we've loaded/merged Firebase data)
+            if (window.firebaseSyncManager?.processQueueAfterLoad) {
+                window.firebaseSyncManager.processQueueAfterLoad();
             }
         } catch (error) {
             console.warn('⚠️ Error syncing from server (continuing with local storage):', error);

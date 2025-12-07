@@ -27,6 +27,19 @@ class FirebaseSync {
         if (this.syncEnabled) {
             // Save user email/name to Firestore when user ID is set
             this.saveUserInfo();
+            // IMPORTANT: Do NOT process sync queue here!
+            // On new device login, the queue might contain empty/stale data
+            // that would overwrite good data in Firebase.
+            // The sync queue will be processed after syncProgressFromServer() 
+            // merges Firebase data with local data.
+            console.log('📋 Sync enabled for user, queue has', this.syncQueue.length, 'items (will process after Firebase load)');
+        }
+    }
+    
+    // Call this AFTER loading from Firebase to process any pending updates
+    processQueueAfterLoad() {
+        if (this.syncEnabled && this.syncQueue.length > 0) {
+            console.log('📤 Processing sync queue after Firebase load:', this.syncQueue.length, 'items');
             this.processSyncQueue();
         }
     }
