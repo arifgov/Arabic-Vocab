@@ -1047,6 +1047,13 @@ class VocabTrainer {
         this.updateSummaryStats();
         this.renderWeakWords();
         
+        // Show/hide "Review Mistakes Only" button based on whether there are mistakes
+        const reviewAgainBtn = document.getElementById('review-again-btn');
+        if (reviewAgainBtn) {
+            // Only show if there are actual mistakes (incorrect > 0)
+            reviewAgainBtn.style.display = this.sessionStats.incorrect > 0 ? 'block' : 'none';
+        }
+        
         // Show "Next Lesson" button if lesson is mastered
         const nextLessonBtn = document.getElementById('next-lesson-btn');
         if (this.isLessonMastered(this.currentBook, this.currentLesson)) {
