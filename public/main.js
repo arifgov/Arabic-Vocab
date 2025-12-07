@@ -198,12 +198,6 @@ class VocabTrainer {
             // User is authenticated, set up sync
             window.firebaseSyncManager.setUserId(user.uid);
             
-            // Check if this is a first-time login or page refresh
-            const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
-            const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
-                                 JSON.parse(hasLocalProgress).wordProgress === undefined ||
-                                 Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
-            
             // Always sync from Firebase on page load/refresh
             console.log('🔄 Syncing with Firebase...');
             await this.syncProgressFromServer();
@@ -212,8 +206,9 @@ class VocabTrainer {
             this.updateUserUI(user);
             this.hideLoginView();
             
-            // Refresh the current view to show updated data
-            this.refreshCurrentView();
+            // Note: refreshCurrentView() might not have an active view yet
+            // showDashboard() will be called after this, which will load the synced data
+            console.log('✅ Sync complete, dashboard will load synced data');
         }
     }
     
@@ -223,12 +218,6 @@ class VocabTrainer {
             console.log('✅ User is authenticated, updating UI and syncing...');
             window.firebaseSyncManager.setUserId(user.uid);
             this.updateUserUI(user);
-            
-            // Check if this is a first-time login or page refresh
-            const hasLocalProgress = localStorage.getItem('madinah_vocab_progress');
-            const isFirstLogin = !hasLocalProgress || hasLocalProgress === '{}' || 
-                                 JSON.parse(hasLocalProgress).wordProgress === undefined ||
-                                 Object.keys(JSON.parse(hasLocalProgress).wordProgress || {}).length === 0;
             
             try {
                 // Always sync from Firebase on page load/refresh
@@ -855,12 +844,25 @@ class VocabTrainer {
         // Reload progress from localStorage (which should have the latest merged data)
         this.progress = this.loadProgress();
         
+        console.log('🔄 refreshCurrentView called');
+        console.log('   - Word progress entries:', Object.keys(this.progress.wordProgress || {}).length);
+        
+        // Log a sample of progress for debugging
+        const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 5);
+        sampleIds.forEach(id => {
+            const wp = this.progress.wordProgress[id];
+            console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}, Mixed=${wp.mixed_correct}, correct=${wp.correct_count}`);
+        });
+        
         // Get current active view
         const activeView = document.querySelector('.view.active');
-        if (!activeView) return;
+        if (!activeView) {
+            console.log('   - No active view found, will refresh when dashboard loads');
+            return;
+        }
         
         const viewId = activeView.id;
-        console.log('🔄 Refreshing current view:', viewId);
+        console.log('   - Active view:', viewId);
         
         if (viewId === 'dashboard-view') {
             this.renderLessonsList();
@@ -874,7 +876,16 @@ class VocabTrainer {
         // Reload progress from localStorage (synced data is already there)
         this.progress = this.loadProgress();
         
-        console.log('🏠 Dashboard: Loaded progress,', Object.keys(this.progress.wordProgress || {}).length, 'words tracked');
+        console.log('🏠 Dashboard: Loaded progress');
+        console.log('   - Words tracked:', Object.keys(this.progress.wordProgress || {}).length);
+        
+        // Log progress for first few words to verify data
+        const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
+        sampleIds.forEach(id => {
+            const wp = this.progress.wordProgress[id];
+            console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}, Mixed=${wp.mixed_correct}`);
+        });
+        
         this.showView('dashboard-view');
         this.renderLessonsList();
         this.updateGlobalStats();
@@ -1278,10 +1289,12 @@ class VocabTrainer {
             // Check if all 3 modes are complete
             const allModesComplete = this.areAllModesComplete(this.currentBook, lessonData.lesson);
             
-            // Check if there's any actual progress (words attempted)
+            // Check if there's any actual progress (words attempted or mode flags set)
             const hasProgress = lessonData.items.some(item => {
                 const wp = this.getWordProgress(item.id);
-                return wp.correct_count > 0 || wp.incorrect_count > 0;
+                // Check counts OR mode-specific completion flags
+                return wp.correct_count > 0 || wp.incorrect_count > 0 || 
+                       wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct;
             });
             
             if (allModesComplete) {
