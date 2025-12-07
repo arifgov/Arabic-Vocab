@@ -183,7 +183,24 @@ class FirebaseSync {
             }
         }
         
-        console.log(`   - Words with progress to sync: ${Object.keys(sanitizedProgress.wordProgress).length} (filtered from ${Object.keys(progressToSync.wordProgress || {}).length})`);
+        const wordsWithProgress = Object.keys(sanitizedProgress.wordProgress).length;
+        console.log(`   - Words with progress to sync: ${wordsWithProgress} (filtered from ${Object.keys(progressToSync.wordProgress || {}).length})`);
+
+        // Check if lesson status has any meaningful data
+        const hasLessonProgress = Object.values(sanitizedProgress.lessonStatus || {}).some(book => 
+            Object.values(book || {}).some(lesson => 
+                lesson.mastered || lesson.final_test_passed
+            )
+        );
+        
+        // CRITICAL: Don't write empty data to Firebase - this would overwrite real progress!
+        if (wordsWithProgress === 0 && !hasLessonProgress) {
+            console.log('⚠️ SKIPPING SYNC - No actual progress to sync (would overwrite server data)');
+            this.syncing = false;
+            return false;
+        }
+        
+        console.log(`   - Has lesson progress: ${hasLessonProgress}`);
 
         try {
             const { doc, setDoc, getDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
