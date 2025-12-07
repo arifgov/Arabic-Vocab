@@ -658,7 +658,9 @@ class VocabTrainer {
     // Check if lesson has passed final test
     hasPassedFinalTest(book, lesson) {
         const status = this.getLessonStatus(book, lesson);
-        return status.final_test_passed || false;
+        const passed = status.final_test_passed || false;
+        console.log(`  🔍 hasPassedFinalTest(Book ${book}, Lesson ${lesson}): ${passed}`, status);
+        return passed;
     }
     
     // Check if lesson is ready for final test (all words mastered)
@@ -701,15 +703,15 @@ class VocabTrainer {
             return true;
         }
         
-        // Check if previous lesson has passed final test
+        // Check if previous lesson exists and has passed final test
         const prevLesson = this.books[book].find(l => l.lesson === lesson - 1);
         if (!prevLesson) {
-            console.log(`  ⚠️ Previous lesson ${lesson - 1} not found, unlocking lesson ${lesson}`);
-            return true;
+            console.log(`  ❌ Previous lesson ${lesson - 1} not found, keeping lesson ${lesson} locked`);
+            return false; // Don't unlock if previous lesson doesn't exist
         }
         
         const prevPassed = this.hasPassedFinalTest(book, lesson - 1);
-        console.log(`  ${prevPassed ? '✅' : '❌'} Lesson ${lesson} unlock status: previous lesson passed = ${prevPassed}`);
+        console.log(`  ${prevPassed ? '✅' : '❌'} Lesson ${lesson} unlock status: previous lesson (${lesson - 1}) passed = ${prevPassed}`);
         return prevPassed;
     }
     
@@ -1087,6 +1089,12 @@ class VocabTrainer {
             const mastered = this.isLessonMastered(this.currentBook, lessonData.lesson);
             const unlocked = this.isLessonUnlocked(this.currentBook, lessonData.lesson);
             
+            // Debug: Check why lesson is unlocked
+            if (unlocked && lessonData.lesson > 1) {
+                const prevLessonStatus = this.getLessonStatus(this.currentBook, lessonData.lesson - 1);
+                console.log(`  🔍 Lesson ${lessonData.lesson} is unlocked. Previous lesson (${lessonData.lesson - 1}) status:`, prevLessonStatus);
+            }
+            
             console.log(`  Lesson ${lessonData.lesson}: unlocked=${unlocked}, mastered=${mastered}`);
             
             // Count tests completed (3 tests per lesson: English→Arabic, Arabic→English, Mixed)
@@ -1114,6 +1122,12 @@ class VocabTrainer {
             const finalTestPassed = this.hasPassedFinalTest(this.currentBook, lessonData.lesson);
             const readyForTest = this.isReadyForFinalTest(this.currentBook, lessonData.lesson);
             
+            // Check if there's any actual progress (words attempted)
+            const hasProgress = lessonData.items.some(item => {
+                const wp = this.getWordProgress(item.id);
+                return wp.correct_count > 0 || wp.incorrect_count > 0;
+            });
+            
             if (finalTestPassed) {
                 status = 'completed';
                 statusText = 'Completed';
@@ -1122,11 +1136,19 @@ class VocabTrainer {
                 status = 'in-progress';
                 statusText = 'Final Test Ready';
                 card.classList.add('in-progress');
-            } else if (unlocked) {
+            } else if (unlocked && hasProgress) {
+                // Only show "In Progress" if unlocked AND there's actual progress
                 status = 'in-progress';
                 statusText = 'In Progress';
                 card.classList.add('in-progress');
+            } else if (unlocked && !hasProgress) {
+                // Unlocked but no progress yet - show as unlocked but don't add in-progress styling
+                status = 'unlocked';
+                statusText = 'Unlocked';
+                // Don't add 'in-progress' class, just leave it unlocked (clickable)
             } else {
+                status = 'locked';
+                statusText = 'Locked';
                 card.classList.add('locked');
             }
             
