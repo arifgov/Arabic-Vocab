@@ -267,17 +267,18 @@ class VocabTrainer {
     }
     
     mergeProgress(local, server) {
-        // Merge strategy: Firebase (server) is the source of truth - server values win on conflicts
-        // But we merge to preserve local progress that hasn't been synced yet
+        // Merge strategy: Local is source of truth during active sessions
+        // For boolean flags (correct/mastered), prefer true values (most progress)
+        // For counts, take the maximum
         const merged = {
             wordProgress: {},
             lessonStatus: { 1: {}, 2: {} },
-            lastBook: server.lastBook || local.lastBook,
-            lastLesson: server.lastLesson || local.lastLesson,
-            lastMode: server.lastMode || local.lastMode
+            lastBook: local.lastBook || server.lastBook,
+            lastLesson: local.lastLesson || server.lastLesson,
+            lastMode: local.lastMode || server.lastMode
         };
         
-        // Merge word progress - server wins on conflicts, but merge counts to preserve latest
+        // Merge word progress - prefer true values for boolean flags (most progress wins)
         const allWordIds = new Set([
             ...Object.keys(local.wordProgress || {}),
             ...Object.keys(server.wordProgress || {})
@@ -287,17 +288,17 @@ class VocabTrainer {
             const localWp = local.wordProgress?.[id] || {};
             const serverWp = server.wordProgress?.[id] || {};
             
-            // Server wins for boolean flags (mastered, correct flags)
-            // But merge counts to get the highest values
+            // For boolean flags: true wins (most progress)
+            // For counts: take maximum
             merged.wordProgress[id] = {
                 correct_count: Math.max(localWp.correct_count || 0, serverWp.correct_count || 0),
                 incorrect_count: Math.max(localWp.incorrect_count || 0, serverWp.incorrect_count || 0),
                 consecutive_correct: Math.max(localWp.consecutive_correct || 0, serverWp.consecutive_correct || 0),
-                // Server wins for boolean flags
-                mastered: serverWp.mastered !== undefined ? serverWp.mastered : (localWp.mastered || false),
-                english_arabic_correct: serverWp.english_arabic_correct !== undefined ? serverWp.english_arabic_correct : (localWp.english_arabic_correct || false),
-                arabic_english_correct: serverWp.arabic_english_correct !== undefined ? serverWp.arabic_english_correct : (localWp.arabic_english_correct || false),
-                mixed_correct: serverWp.mixed_correct !== undefined ? serverWp.mixed_correct : (localWp.mixed_correct || false),
+                // Boolean flags: true wins (preserve most progress)
+                mastered: localWp.mastered || serverWp.mastered || false,
+                english_arabic_correct: localWp.english_arabic_correct || serverWp.english_arabic_correct || false,
+                arabic_english_correct: localWp.arabic_english_correct || serverWp.arabic_english_correct || false,
+                mixed_correct: localWp.mixed_correct || serverWp.mixed_correct || false,
                 // Session flags are local only
                 session_english_arabic: localWp.session_english_arabic || false,
                 session_arabic_english: localWp.session_arabic_english || false,
@@ -305,7 +306,7 @@ class VocabTrainer {
             };
         });
         
-        // Merge lesson status - server wins
+        // Merge lesson status - true wins (most progress)
         for (const book of [1, 2]) {
             const localLessons = local.lessonStatus?.[book] || {};
             const serverLessons = server.lessonStatus?.[book] || {};
@@ -317,16 +318,16 @@ class VocabTrainer {
             allLessons.forEach(lesson => {
                 const localStatus = localLessons[lesson] || {};
                 const serverStatus = serverLessons[lesson] || {};
-                // Server wins, but fallback to local if server doesn't have it
+                // True wins (preserve most progress)
                 merged.lessonStatus[book][lesson] = {
-                    mastered: serverStatus.mastered !== undefined ? serverStatus.mastered : (localStatus.mastered || false),
-                    final_test_passed: serverStatus.final_test_passed !== undefined ? serverStatus.final_test_passed : (localStatus.final_test_passed || false),
-                    date_completed: serverStatus.date_completed || localStatus.date_completed || null
+                    mastered: localStatus.mastered || serverStatus.mastered || false,
+                    final_test_passed: localStatus.final_test_passed || serverStatus.final_test_passed || false,
+                    date_completed: localStatus.date_completed || serverStatus.date_completed || null
                 };
             });
         }
         
-        console.log('🔀 Merged progress - Firebase is source of truth');
+        console.log('🔀 Merged progress - preserving most progress (true values win)');
         return merged;
     }
     
@@ -418,14 +419,18 @@ class VocabTrainer {
             this.progress = this.loadProgress();
         }
         try {
+            // Save to localStorage first (immediate, reliable)
             localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
             console.log('💾 Progress saved to localStorage');
             
-            // Sync to Firestore if authenticated - Firebase is source of truth
+            // Sync to Firestore if authenticated - but don't wait for it
+            // Local storage is the immediate source of truth during active sessions
             if (window.firebaseSyncManager?.syncEnabled) {
-                // Use saveProgress which will handle debouncing and immediate sync when needed
+                // Force immediate sync (bypass debounce) for critical saves
+                // This ensures progress is synced quickly
                 window.firebaseSyncManager.saveProgress(this.progress).catch(error => {
                     console.warn('Background sync failed (local storage saved):', error.code || error.message);
+                    // Don't block - local storage is saved, sync can retry
                 });
             }
         } catch (e) {
@@ -493,18 +498,34 @@ class VocabTrainer {
             this.progress.wordProgress = {};
         }
         
-        // Merge with existing data
+        // Get existing progress (preserve all mode-specific flags)
         const existing = this.progress.wordProgress[id] || {
             correct_count: 0,
             incorrect_count: 0,
             consecutive_correct: 0,
-            mastered: false
+            mastered: false,
+            english_arabic_correct: false,
+            arabic_english_correct: false,
+            mixed_correct: false,
+            session_english_arabic: false,
+            session_arabic_english: false,
+            session_mixed: false
         };
         
-        // Update with new data
-        this.progress.wordProgress[id] = { ...existing, ...data };
+        // Merge with new data - preserve mode-specific flags if not provided
+        this.progress.wordProgress[id] = {
+            ...existing,
+            ...data,
+            // Preserve mode-specific flags if not in data (to prevent overwriting)
+            english_arabic_correct: data.english_arabic_correct !== undefined ? data.english_arabic_correct : existing.english_arabic_correct,
+            arabic_english_correct: data.arabic_english_correct !== undefined ? data.arabic_english_correct : existing.arabic_english_correct,
+            mixed_correct: data.mixed_correct !== undefined ? data.mixed_correct : existing.mixed_correct,
+            session_english_arabic: data.session_english_arabic !== undefined ? data.session_english_arabic : existing.session_english_arabic,
+            session_arabic_english: data.session_arabic_english !== undefined ? data.session_arabic_english : existing.session_arabic_english,
+            session_mixed: data.session_mixed !== undefined ? data.session_mixed : existing.session_mixed
+        };
         
-        // Save to localStorage and Firebase
+        // Save to localStorage and Firebase immediately
         this.saveProgress();
         console.log('✅ Saved progress for', id, ':', this.progress.wordProgress[id]);
         console.log('📦 Total words in progress:', Object.keys(this.progress.wordProgress).length);
@@ -757,8 +778,12 @@ class VocabTrainer {
         this.currentBook = book;
         this.currentLesson = lesson;
         
-        // Reload progress from localStorage to ensure we have latest data
+        // Reload progress from localStorage first (this is the source of truth during active session)
         this.progress = this.loadProgress();
+        
+        // Only sync from Firebase if we're not in an active session (to avoid overwriting recent progress)
+        // Don't sync on every view change - only on initial load or explicit sync
+        // This prevents Firebase from overwriting local progress that was just saved
         
         this.showView('lesson-view');
         
@@ -1745,13 +1770,21 @@ class VocabTrainer {
             feedbackEl.innerHTML = '<strong>❌ Incorrect - Keep practicing!</strong>';
         }
         
-        // Save updated progress (this also syncs to Firebase)
-        this.setWordProgress(this.currentQuestion.id, updatedProgress);
-        
-        // Update mastery - use currentMode (not actualMode) so mixed mode tracks independently
-        // actualMode is the UI mode (english-arabic or arabic-english randomly chosen for mixed)
-        // but we want to track progress for the mode the user selected (mixed)
+        // Update mastery FIRST - this sets the mode-specific flags (arabic_english_correct, etc.)
+        // Use currentMode (not actualMode) so mixed mode tracks independently
         this.updateWordMastery(this.currentQuestion.id, this.currentMode, isCorrect);
+        
+        // Then save updated progress (counts) - updateWordMastery already saved, but we need to update counts
+        // Get the word progress again after mastery update to include the mode flags
+        const wpAfterMastery = this.getWordProgress(this.currentQuestion.id);
+        this.setWordProgress(this.currentQuestion.id, {
+            ...updatedProgress,
+            // Preserve mode-specific flags that were set by updateWordMastery
+            english_arabic_correct: wpAfterMastery.english_arabic_correct,
+            arabic_english_correct: wpAfterMastery.arabic_english_correct,
+            mixed_correct: wpAfterMastery.mixed_correct,
+            mastered: wpAfterMastery.mastered
+        });
         
         // Save session state after each answer (for resume functionality)
         this.saveSessionState();

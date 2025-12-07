@@ -8,9 +8,9 @@ class FirebaseSync {
         this.syncing = false;
         this.pendingProgress = null;
         this.syncTimer = null;
-        this.syncDelay = 500; // Reduced to 500ms for faster sync
+        this.syncDelay = 200; // Reduced to 200ms for faster sync
         this.lastSyncTime = 0;
-        this.minSyncInterval = 1000; // Reduced to 1 second for faster sync
+        this.minSyncInterval = 500; // Reduced to 500ms for faster sync
     }
 
     async init() {
