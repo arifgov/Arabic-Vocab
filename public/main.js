@@ -90,6 +90,9 @@ class VocabTrainer {
             }
         }
         
+        // Show dashboard - if user is logged in, syncProgressFromServer() in checkAuthState()
+        // or handleAuthStateChange() will have already loaded Firebase data to localStorage
+        // showDashboard() will load from localStorage, which will have the synced data
         await this.showDashboard();
         this.updateGlobalStats();
     }
@@ -206,8 +209,7 @@ class VocabTrainer {
             this.updateUserUI(user);
             this.hideLoginView();
             
-            // Note: refreshCurrentView() might not have an active view yet
-            // showDashboard() will be called after this, which will load the synced data
+            // CRITICAL: Data is now synced to localStorage, showDashboard() will load it
             console.log('✅ Sync complete, dashboard will load synced data');
         }
     }
@@ -224,10 +226,27 @@ class VocabTrainer {
                 console.log('🔄 Syncing with Firebase...');
                 await this.syncProgressFromServer();
                 
-                // Refresh the current view to show updated data
-                this.refreshCurrentView();
+                // CRITICAL: After syncing, ensure dashboard is shown and refreshed
+                // This is especially important for first-time login on a new device
+                const activeView = document.querySelector('.view.active');
+                const isDashboardActive = activeView && activeView.id === 'dashboard-view';
+                
+                if (isDashboardActive) {
+                    // Dashboard is already showing, just refresh it
+                    console.log('🔄 Refreshing dashboard with synced data...');
+                    this.refreshCurrentView();
+                } else {
+                    // Dashboard not shown yet, show it (this will load the synced data)
+                    console.log('🔄 Showing dashboard with synced data...');
+                    await this.showDashboard();
+                }
             } catch (error) {
                 console.error('Error syncing progress:', error);
+                // Even if sync fails, show dashboard
+                const activeView = document.querySelector('.view.active');
+                if (!activeView || activeView.id !== 'dashboard-view') {
+                    await this.showDashboard();
+                }
             }
             this.hideLoginView();
             console.log('✅ Login complete, UI updated');
@@ -923,7 +942,9 @@ class VocabTrainer {
         // Get current active view
         const activeView = document.querySelector('.view.active');
         if (!activeView) {
-            console.log('   - No active view found, will refresh when dashboard loads');
+            console.log('   - No active view found, showing dashboard...');
+            // If no active view, show dashboard (this will load the synced data)
+            this.showDashboard();
             return;
         }
         
