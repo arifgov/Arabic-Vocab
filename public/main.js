@@ -264,9 +264,9 @@ class VocabTrainer {
                 // CRITICAL: After syncing, verify data was saved and ALWAYS show/refresh dashboard
                 // This is especially important for first-time login on a new device
                 // Force reload progress from localStorage (which now has synced data)
-                const syncedProgress = this.loadProgress();
-                const syncedWordCount = Object.keys(syncedProgress.wordProgress || {}).length;
-                const hasSyncedProgress = Object.values(syncedProgress.wordProgress || {}).some(wp => 
+                let syncedProgress = this.loadProgress();
+                let syncedWordCount = Object.keys(syncedProgress.wordProgress || {}).length;
+                let hasSyncedProgress = Object.values(syncedProgress.wordProgress || {}).some(wp => 
                     wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
                     wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
                 );
@@ -274,21 +274,34 @@ class VocabTrainer {
                 console.log('📊 After sync, progress loaded:', syncedWordCount, 'words');
                 console.log('   - Has actual progress:', hasSyncedProgress);
                 
-                // Verify data was actually synced
+                // Verify data was actually synced - if not, try loading from Firebase directly
+                // This handles cases where syncProgressFromServer didn't load server data correctly
                 if (syncedWordCount === 0 && !hasSyncedProgress) {
-                    console.warn('⚠️ No progress found after sync - checking Firebase again...');
+                    console.warn('⚠️ No progress found after sync - checking Firebase directly...');
+                    // Wait a bit to ensure Firebase is fully ready
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     // Try loading directly from Firebase one more time
                     const directServerProgress = await window.firebaseSyncManager.loadProgress();
-                    if (directServerProgress && Object.keys(directServerProgress.wordProgress || {}).length > 0) {
-                        console.log('✅ Found progress in Firebase, saving to localStorage...');
+                    const directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
+                    if (directServerProgress && directWordCount > 0) {
+                        console.log(`✅ Found progress in Firebase (${directWordCount} words), saving to localStorage...`);
                         this.progress = directServerProgress;
                         this.progress.localModifiedAt = Date.now();
                         localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                         console.log('✅ Progress saved to localStorage');
+                        syncedProgress = this.progress;
+                        syncedWordCount = directWordCount;
+                        hasSyncedProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
+                            wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+                            wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+                        );
+                    } else {
+                        console.log(`📭 Firebase also has no data (${directWordCount} words) - starting fresh`);
                     }
-                } else {
-                    this.progress = syncedProgress;
                 }
+                
+                // Always set this.progress to the synced progress
+                this.progress = syncedProgress;
                 
                 // Hide login view first
                 this.hideLoginView();
@@ -385,9 +398,9 @@ class VocabTrainer {
                 window.firebaseSyncManager.pendingProgress = null;
             }
 
-            const serverProgress = await window.firebaseSyncManager.loadProgress();
-            const serverWordCount = Object.keys(serverProgress?.wordProgress || {}).length;
-            const serverTimestamp = serverProgress?.localModifiedAt || 0;
+            let serverProgress = await window.firebaseSyncManager.loadProgress();
+            let serverWordCount = Object.keys(serverProgress?.wordProgress || {}).length;
+            let serverTimestamp = serverProgress?.localModifiedAt || 0;
             const localTimestamp = localProgress?.localModifiedAt || 0;
             
             console.log('📥 Server returned:', serverProgress ? `${serverWordCount} words` : 'null');
@@ -399,6 +412,7 @@ class VocabTrainer {
             }
 
             // CRITICAL: If server has data, ALWAYS respect it (it's the source of truth)
+            // Also handle case where serverProgress exists but wordProgress is empty (shouldn't happen, but be safe)
             if (serverProgress && serverWordCount > 0) {
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
@@ -437,12 +451,39 @@ class VocabTrainer {
                 } else {
                     console.log('📭 Not syncing back - server data is newer or equal, or local has less progress');
                 }
-            } else if (serverProgress === null && hasActualProgress) {
+            } else if (serverProgress && serverWordCount === 0) {
+                // Server returned an object but with no wordProgress data
+                // This shouldn't happen, but handle it gracefully
+                console.log('⚠️ Server returned progress object but with 0 words - treating as no data');
+                // Fall through to handle as if serverProgress was null
+                serverProgress = null;
+            }
+            
+            if (serverProgress === null && hasActualProgress) {
                 // No server data but we have local data with actual progress - upload it
                 console.log('📤 No server data, uploading local progress to Firebase...');
                 window.firebaseSyncManager.saveProgress(localProgress);
             } else if (serverProgress === null && !hasActualProgress) {
                 // No server data and no local progress - this is fine, just continue
+                // BUT: If this is a new device (no local progress), we should still check
+                // if server has data one more time, in case there was a timing issue
+                if (isNewDevice) {
+                    console.log('🔄 New device - double-checking Firebase (may have timing issue)...');
+                    // Try one more time with a small delay to ensure Firebase is ready
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const retryServerProgress = await window.firebaseSyncManager.loadProgress();
+                    const retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
+                    if (retryServerProgress && retryWordCount > 0) {
+                        console.log(`✅ Found progress on retry (${retryWordCount} words), loading from Firebase...`);
+                        this.progress = retryServerProgress;
+                        this.progress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                        console.log('✅ Progress saved to localStorage');
+                        return; // Exit early since we loaded server data
+                    } else {
+                        console.log(`📭 Retry also returned ${retryWordCount} words - no server data available`);
+                    }
+                }
                 console.log('📭 No progress found (server or local) - starting fresh');
             } else {
                 // Server returned empty/null progress - don't overwrite with local
@@ -666,9 +707,12 @@ class VocabTrainer {
     }
     
     getWordProgress(id) {
-        // Always reload from localStorage to get latest data
-        const latestProgress = this.loadProgress();
-        this.progress = latestProgress;
+        // Use cached progress if available (set by renderLessonsList or other methods)
+        // Only reload if progress is not already loaded
+        if (!this.progress || !this.progress.wordProgress) {
+            const latestProgress = this.loadProgress();
+            this.progress = latestProgress;
+        }
         
         // Ensure wordProgress structure exists
         if (!this.progress.wordProgress) {
@@ -1404,6 +1448,8 @@ class VocabTrainer {
         this.progress = this.loadProgress();
         
         // Cache progress lookups for performance
+        // CRITICAL: Load progress ONCE and cache it, so getWordProgress doesn't reload every time
+        this.progress = this.loadProgress();
         const progressCache = new Map();
         const getCachedWordProgress = (wordId) => {
             if (!progressCache.has(wordId)) {
