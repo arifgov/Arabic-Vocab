@@ -278,26 +278,38 @@ class VocabTrainer {
                 // This handles cases where syncProgressFromServer didn't load server data correctly
                 // Check if we have NO actual progress (even if word entries exist from initializeProgress)
                 if (!hasSyncedProgress) {
-                    console.warn('⚠️ No actual progress found after sync - checking Firebase directly (may have timing issue)...');
-                    // Wait a bit to ensure Firebase is fully ready
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    // Try loading directly from Firebase one more time
-                    const directServerProgress = await window.firebaseSyncManager.loadProgress();
-                    const directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
-                    if (directServerProgress && directWordCount > 0) {
-                        console.log(`✅ Found progress in Firebase (${directWordCount} words), saving to localStorage...`);
-                        this.progress = directServerProgress;
-                        this.progress.localModifiedAt = Date.now();
-                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                        console.log('✅ Progress saved to localStorage');
-                        syncedProgress = this.progress;
-                        syncedWordCount = directWordCount;
-                        hasSyncedProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
-                            wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
-                            wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
-                        );
-                    } else {
-                        console.log(`📭 Firebase also has no data (${directWordCount} words) - starting fresh`);
+                    console.warn('⚠️ No actual progress found after sync - checking Firebase directly with multiple retries (may have timing issue)...');
+                    
+                    // Try multiple times with increasing delays
+                    const retryDelays = [2500, 3500, 5000]; // 2.5s, 3.5s, 5s delays
+                    let directServerProgress = null;
+                    let directWordCount = 0;
+                    
+                    for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+                        console.log(`🔄 Direct Firebase retry attempt ${attempt + 1}/${retryDelays.length} (waiting ${retryDelays[attempt]}ms)...`);
+                        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+                        directServerProgress = await window.firebaseSyncManager.loadProgress();
+                        directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
+                        if (directServerProgress && directWordCount > 0) {
+                            console.log(`✅ Found progress in Firebase on attempt ${attempt + 1} (${directWordCount} words), saving to localStorage...`);
+                            this.progress = directServerProgress;
+                            this.progress.localModifiedAt = Date.now();
+                            localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                            console.log('✅ Progress saved to localStorage');
+                            syncedProgress = this.progress;
+                            syncedWordCount = directWordCount;
+                            hasSyncedProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
+                                wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+                                wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+                            );
+                            break; // Found data, exit retry loop
+                        } else {
+                            console.log(`📭 Direct retry attempt ${attempt + 1} returned ${directWordCount} words`);
+                        }
+                    }
+                    
+                    if (!hasSyncedProgress) {
+                        console.log(`📭 All ${retryDelays.length} direct Firebase retry attempts returned no data - starting fresh`);
                     }
                 }
                 
@@ -468,22 +480,33 @@ class VocabTrainer {
                 // No server data and no local progress - this is fine, just continue
                 // BUT: Always retry loading from Firebase on first login, in case there was a timing issue
                 // This is critical for new devices where Firebase might not be ready immediately
-                console.log('🔄 No server data found - retrying Firebase load (may have timing issue)...');
-                // Try one more time with a delay to ensure Firebase is fully ready
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                const retryServerProgress = await window.firebaseSyncManager.loadProgress();
-                const retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
-                if (retryServerProgress && retryWordCount > 0) {
-                    console.log(`✅ Found progress on retry (${retryWordCount} words), loading from Firebase...`);
-                    this.progress = retryServerProgress;
-                    this.progress.localModifiedAt = Date.now();
-                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                    console.log('✅ Progress saved to localStorage');
-                    return; // Exit early since we loaded server data
-                } else {
-                    console.log(`📭 Retry also returned ${retryWordCount} words - no server data available`);
-                    console.log('📭 No progress found (server or local) - starting fresh');
+                console.log('🔄 No server data found - retrying Firebase load with multiple attempts (may have timing issue)...');
+                
+                // Try multiple times with increasing delays to ensure Firebase is fully ready
+                let retryServerProgress = null;
+                let retryWordCount = 0;
+                const retryDelays = [2000, 3000, 4000]; // 2s, 3s, 4s delays
+                
+                for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+                    console.log(`🔄 Retry attempt ${attempt + 1}/${retryDelays.length} (waiting ${retryDelays[attempt]}ms)...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+                    retryServerProgress = await window.firebaseSyncManager.loadProgress();
+                    retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
+                    if (retryServerProgress && retryWordCount > 0) {
+                        console.log(`✅ Found progress on retry attempt ${attempt + 1} (${retryWordCount} words), loading from Firebase...`);
+                        this.progress = retryServerProgress;
+                        this.progress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                        console.log('✅ Progress saved to localStorage');
+                        return; // Exit early since we loaded server data
+                    } else {
+                        console.log(`📭 Retry attempt ${attempt + 1} returned ${retryWordCount} words`);
+                    }
                 }
+                
+                // All retries failed
+                console.log(`📭 All ${retryDelays.length} retry attempts returned no data - no server data available`);
+                console.log('📭 No progress found (server or local) - starting fresh');
             } else {
                 // Server returned empty/null progress - don't overwrite with local
                 console.log('📭 Server has no progress data - keeping local data but not uploading');
@@ -706,14 +729,12 @@ class VocabTrainer {
     }
     
     getWordProgress(id) {
-        // Use cached progress if available (set by renderLessonsList or other methods)
-        // Only reload if progress is not already loaded - this prevents hundreds of localStorage reads
-        if (!this.progress || !this.progress.wordProgress) {
-            const latestProgress = this.loadProgress();
-            this.progress = latestProgress;
+        // CRITICAL: Only reload if this.progress is completely missing
+        // If this.progress exists but wordProgress is undefined, just initialize it to {}
+        // This prevents hundreds of localStorage reads during rendering
+        if (!this.progress) {
+            this.progress = this.loadProgress();
         }
-        
-        // Ensure wordProgress structure exists
         if (!this.progress.wordProgress) {
             this.progress.wordProgress = {};
         }
@@ -932,9 +953,14 @@ class VocabTrainer {
         const lessonData = this.books[book]?.find(l => l.lesson === lesson);
         if (!lessonData) return false;
         
-        // Ensure progress is loaded (but don't reload if already loaded)
-        if (!this.progress || !this.progress.wordProgress) {
+        // CRITICAL: Only reload if this.progress is completely missing
+        // If this.progress exists but wordProgress is undefined, just initialize it to {}
+        // This prevents hundreds of localStorage reads during rendering
+        if (!this.progress) {
             this.progress = this.loadProgress();
+        }
+        if (!this.progress.wordProgress) {
+            this.progress.wordProgress = {};
         }
         
         const totalWords = lessonData.items.length;
