@@ -427,15 +427,29 @@ class VocabTrainer {
             // CRITICAL: If server has data, ALWAYS respect it (it's the source of truth)
             // Also handle case where serverProgress exists but wordProgress is empty (shouldn't happen, but be safe)
             if (serverProgress && serverWordCount > 0) {
+                // Calculate completed word counts for comparison
+                const serverCompletedCount = this.calculateCompletedWordCount(serverProgress);
+                const localCompletedCount = this.calculateCompletedWordCount(localProgress);
+                
+                console.log(`   - Server completed words: ${serverCompletedCount}`);
+                console.log(`   - Local completed words: ${localCompletedCount}`);
+                
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
                     console.log('📥 New device - using Firebase data directly (no merge)');
                     this.progress = serverProgress;
                 } else {
-                    // EXISTING DEVICE: Merge Firebase + Local, but server data takes precedence
-                    console.log('📥 Existing device - merging Firebase with local (server data respected)');
-                    // Merge but ensure server data is preserved (mergeProgress already does this by taking max/true values)
-                    this.progress = this.mergeProgress(localProgress, serverProgress);
+                    // EXISTING DEVICE: Check if server has better progress
+                    // If server has MORE completed words, use server data directly (don't merge with worse local)
+                    if (serverCompletedCount > localCompletedCount) {
+                        console.log('📥 Server has MORE completed words - using server data directly (respecting better progress)');
+                        console.log(`   - Server: ${serverCompletedCount} completed, Local: ${localCompletedCount} completed`);
+                        this.progress = serverProgress;
+                    } else {
+                        // Merge Firebase + Local (mergeProgress already preserves most progress)
+                        console.log('📥 Existing device - merging Firebase with local (server data respected)');
+                        this.progress = this.mergeProgress(localProgress, serverProgress);
+                    }
                 }
                 
                 // Update localModifiedAt to current time after merge/load
@@ -443,7 +457,8 @@ class VocabTrainer {
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                 
                 const finalWordCount = Object.keys(this.progress.wordProgress || {}).length;
-                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words');
+                const finalCompletedCount = this.calculateCompletedWordCount(this.progress);
+                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words,', finalCompletedCount, 'completed');
                 
                 // Log sample of saved data for verification
                 const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
@@ -452,17 +467,14 @@ class VocabTrainer {
                     console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
                 });
                 
-                // CRITICAL: Only sync back if local is NEWER than server AND has more progress
-                // This prevents old local data from overwriting newer server data
-                if (!isNewDevice && localTimestamp > serverTimestamp && finalWordCount > serverWordCount) {
-                    console.log('📤 Local is newer and has more progress, syncing back to Firebase...');
-                    window.firebaseSyncManager.saveProgress(this.progress);
-                } else if (!isNewDevice && localTimestamp > serverTimestamp) {
-                    console.log('📤 Local is newer (but server has more words), syncing back to Firebase...');
-                    // Even if server has more words, if local is newer, sync it (performSync will do timestamp check)
+                // CRITICAL: Only sync back if local has MORE completed words than server
+                // This ensures we don't overwrite better progress (e.g., 19/37) with worse progress (e.g., 14/37)
+                if (!isNewDevice && finalCompletedCount > serverCompletedCount) {
+                    console.log(`📤 Local has MORE completed words (${finalCompletedCount} > ${serverCompletedCount}), syncing back to Firebase...`);
                     window.firebaseSyncManager.saveProgress(this.progress);
                 } else {
-                    console.log('📭 Not syncing back - server data is newer or equal, or local has less progress');
+                    console.log('📭 Not syncing back - server has equal or better progress');
+                    console.log(`   - Server: ${serverCompletedCount} completed, Final: ${finalCompletedCount} completed`);
                 }
             } else if (serverProgress && serverWordCount === 0) {
                 // Server returned an object but with no wordProgress data
@@ -522,6 +534,29 @@ class VocabTrainer {
         }
     }
     
+    /**
+     * Calculate the number of completed words in progress data.
+     * A word is considered "completed" if it has at least one of:
+     * - english_arabic_correct = true
+     * - arabic_english_correct = true
+     * - mixed_correct = true
+     * 
+     * This represents actual progress quality (e.g., 19/37 vs 14/37).
+     */
+    calculateCompletedWordCount(progressData) {
+        if (!progressData || !progressData.wordProgress) {
+            return 0;
+        }
+        
+        let completedCount = 0;
+        for (const [wordId, wp] of Object.entries(progressData.wordProgress)) {
+            if (wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct) {
+                completedCount++;
+            }
+        }
+        return completedCount;
+    }
+
     mergeProgress(local, server) {
         // Merge strategy: Local is source of truth during active sessions
         // For boolean flags (correct/mastered), prefer true values (most progress)

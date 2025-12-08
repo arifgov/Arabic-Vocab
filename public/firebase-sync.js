@@ -255,6 +255,26 @@ class FirebaseSync {
                 return false;
             }
             
+            // CRITICAL: Compare actual progress quality (completed words)
+            // If server has MORE completed words than local, don't overwrite
+            // This ensures we don't overwrite better results (e.g., 19/37) with worse results (e.g., 14/37)
+            if (serverHasData && existingData.progress) {
+                const serverCompletedCount = this.calculateCompletedWordCount(existingData.progress);
+                const localCompletedCount = this.calculateCompletedWordCount(sanitizedProgress);
+                
+                console.log(`   - Server completed words: ${serverCompletedCount}`);
+                console.log(`   - Local completed words: ${localCompletedCount}`);
+                
+                if (serverCompletedCount > localCompletedCount) {
+                    console.warn('⚠️ SKIPPING SYNC - Server has MORE completed words than local!');
+                    console.warn(`   - Server: ${serverCompletedCount} completed words`);
+                    console.warn(`   - Local: ${localCompletedCount} completed words`);
+                    console.warn('   - This prevents overwriting better progress (e.g., 19/37) with worse progress (e.g., 14/37)');
+                    this.syncing = false;
+                    return false;
+                }
+            }
+            
             // Build complete document - replace progress completely, preserve email/name
             const completeData = {
                 progress: sanitizedProgress, // COMPLETE REPLACEMENT - no merging (sanitized to remove undefined)
@@ -444,6 +464,29 @@ class FirebaseSync {
 
     clearQueue() {
         this.syncQueue = [];
+    }
+
+    /**
+     * Calculate the number of completed words in progress data.
+     * A word is considered "completed" if it has at least one of:
+     * - english_arabic_correct = true
+     * - arabic_english_correct = true
+     * - mixed_correct = true
+     * 
+     * This represents actual progress quality (e.g., 19/37 vs 14/37).
+     */
+    calculateCompletedWordCount(progressData) {
+        if (!progressData || !progressData.wordProgress) {
+            return 0;
+        }
+        
+        let completedCount = 0;
+        for (const [wordId, wp] of Object.entries(progressData.wordProgress)) {
+            if (wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct) {
+                completedCount++;
+            }
+        }
+        return completedCount;
     }
 }
 
