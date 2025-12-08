@@ -17,5 +17,8 @@ Thumbs.db
 # Logs
 *.log
 
+# Version tracking
+.mainjs-hash
+
 
 

@@ -1,7 +1,9 @@
 // Service Worker for Madinah Arabic Vocab Trainer
-const CACHE_NAME = 'arabic-vocab-v1';
-const STATIC_CACHE = 'arabic-vocab-static-v1';
-const DATA_CACHE = 'arabic-vocab-data-v1';
+// IMPORTANT: Update APP_VERSION when releasing a new version to force cache refresh
+const APP_VERSION = '1.0.0'; // Update this with each release (e.g., '1.0.1', '1.1.0', etc.)
+const CACHE_NAME = `arabic-vocab-${APP_VERSION}`;
+const STATIC_CACHE = `arabic-vocab-static-${APP_VERSION}`;
+const DATA_CACHE = `arabic-vocab-data-${APP_VERSION}`;
 
 // Files to cache immediately
 const STATIC_FILES = [
@@ -20,11 +22,20 @@ const DATA_FILES = [
 
 // Install event - cache static files
 self.addEventListener('install', (event) => {
-  console.log('Service Worker: Installing...');
+  console.log('Service Worker: Installing version', APP_VERSION);
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
       console.log('Service Worker: Caching static files');
-      return cache.addAll(STATIC_FILES);
+      // Add version query param to bust cache
+      const versionedFiles = STATIC_FILES.map(file => {
+        const separator = file.includes('?') ? '&' : '?';
+        return file + separator + 'v=' + APP_VERSION;
+      });
+      return cache.addAll(versionedFiles).catch((err) => {
+        // If versioned files fail, try original files
+        console.warn('Failed to cache versioned files, trying originals:', err);
+        return cache.addAll(STATIC_FILES);
+      });
     })
   );
   self.skipWaiting(); // Activate immediately
@@ -32,17 +43,25 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker: Activating...');
+  console.log('Service Worker: Activating...', APP_VERSION);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== STATIC_CACHE && cacheName !== DATA_CACHE && cacheName !== CACHE_NAME) {
+          // Delete ALL old caches that don't match current version
+          if (!cacheName.includes(APP_VERSION)) {
             console.log('Service Worker: Deleting old cache', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    }).then(() => {
+      // Force all clients to reload to get new version
+      return self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SW_UPDATE', version: APP_VERSION });
+        });
+      });
     })
   );
   return self.clients.claim(); // Take control of all pages

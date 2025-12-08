@@ -203,7 +203,7 @@ class FirebaseSync {
         console.log(`   - Has lesson progress: ${hasLessonProgress}`);
 
         try {
-            const { doc, setDoc, getDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const { doc, setDoc, getDoc, getDocFromServer, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
             const userRef = doc(this.db, 'users', this.userId);
             
             // Get current user info from Firebase Auth to save email/name
@@ -217,19 +217,48 @@ class FirebaseSync {
                 }
             }
             
-            // Load existing data to preserve email/name
-            const existingDoc = await getDoc(userRef);
+            // CRITICAL: Load existing server data to check timestamps and prevent overwriting newer data
+            const existingDoc = await getDocFromServer(userRef).catch(() => getDoc(userRef)); // Try server first, fallback to cache
             const existingData = existingDoc.exists() ? existingDoc.data() : {};
+            const serverLocalTimestamp = existingData.localTimestamp || 0;
+            const serverHasData = existingDoc.exists() && existingData.progress && 
+                (Object.keys(existingData.progress.wordProgress || {}).length > 0 ||
+                 Object.values(existingData.progress.lessonStatus || {}).some(book => 
+                     Object.values(book || {}).some(lesson => lesson.mastered || lesson.final_test_passed)
+                 ));
             
             console.log(`   - Server doc exists: ${existingDoc.exists()}`);
-            if (existingData.localTimestamp) {
-                console.log(`   - Server localTimestamp: ${existingData.localTimestamp} (${new Date(existingData.localTimestamp).toLocaleTimeString()})`);
+            console.log(`   - Server has data: ${serverHasData}`);
+            if (serverLocalTimestamp) {
+                console.log(`   - Server localTimestamp: ${serverLocalTimestamp} (${new Date(serverLocalTimestamp).toLocaleTimeString()})`);
+            }
+            console.log(`   - Local modified at: ${localModifiedAt} (${new Date(localModifiedAt).toLocaleTimeString()})`);
+            
+            // CRITICAL SAFEGUARD: Never overwrite server data if it's newer than local
+            if (serverHasData && serverLocalTimestamp > localModifiedAt) {
+                console.warn('⚠️ SKIPPING SYNC - Server data is NEWER than local data!');
+                console.warn(`   - Server timestamp: ${new Date(serverLocalTimestamp).toLocaleTimeString()}`);
+                console.warn(`   - Local timestamp: ${new Date(localModifiedAt).toLocaleTimeString()}`);
+                console.warn('   - This prevents older local data from overwriting newer server data');
+                this.syncing = false;
+                return false;
+            }
+            
+            // Additional safeguard: If server has substantial data but local has very little, be cautious
+            const serverWordCount = Object.keys(existingData.progress?.wordProgress || {}).length;
+            const localWordCount = wordsWithProgress;
+            if (serverHasData && serverWordCount > 10 && localWordCount < 5) {
+                console.warn('⚠️ SKIPPING SYNC - Server has substantial data but local has very little');
+                console.warn(`   - Server words: ${serverWordCount}, Local words: ${localWordCount}`);
+                console.warn('   - This prevents empty/minimal local data from overwriting substantial server data');
+                this.syncing = false;
+                return false;
             }
             
             // Build complete document - replace progress completely, preserve email/name
             const completeData = {
                 progress: sanitizedProgress, // COMPLETE REPLACEMENT - no merging (sanitized to remove undefined)
-                lastSync: serverTimestamp(),
+                lastSync: serverTimestamp(), // Use Firestore serverTimestamp() function for lastSync
                 updatedAt: new Date().toISOString(),
                 localTimestamp: syncStartTime, // Use sync start time as the version
                 // Preserve email/name from existing or use current user info
@@ -241,7 +270,8 @@ class FirebaseSync {
             console.log('   - Sanitized progress word count:', Object.keys(sanitizedProgress.wordProgress).length);
             
             // Replace entire document - this ensures progress is completely overwritten
-            console.log('   - About to write to Firestore...');
+            // BUT only if we passed all the safeguards above
+            console.log('   - About to write to Firestore (passed all safeguards)...');
             await setDoc(userRef, completeData);
 
             this.lastSyncTime = Date.now();

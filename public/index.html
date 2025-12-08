@@ -8,8 +8,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#6366f1">
     <title>Madinah Arabic Vocab Trainer</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="manifest" href="manifest.json">
+    <!-- Cache busting: Update version query param when releasing new version -->
+    <link rel="stylesheet" href="styles.css?v=1.0.0">
+    <link rel="manifest" href="manifest.json?v=1.0.0">
     
     <!-- Firebase SDKs -->
     <script type="module">
@@ -313,21 +314,51 @@
         </div>
     </div>
     
-    <script src="firebase-auth.js"></script>
-    <script src="firebase-sync.js"></script>
-    <script src="main.js"></script>
-    <script src="admin.js"></script>
+    <!-- Cache busting: Update version query param when releasing new version -->
+    <script src="firebase-auth.js?v=1.0.0"></script>
+    <script src="firebase-sync.js?v=1.0.0"></script>
+    <script src="main.js?v=1.0.0"></script>
+    <script src="admin.js?v=1.0.0"></script>
     <script>
-        // Register service worker
+        // Register service worker with cache busting
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
+                // Add version query param to force update
+                navigator.serviceWorker.register('/sw.js?v=1.0.0')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration.scope);
+                        
+                        // Listen for service worker updates
+                        registration.addEventListener('updatefound', () => {
+                            console.log('New service worker version found, reloading...');
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'activated') {
+                                    // Reload page to get new version
+                                    window.location.reload();
+                                }
+                            });
+                        });
+                        
+                        // Check for updates periodically
+                        setInterval(() => {
+                            registration.update();
+                        }, 60000); // Check every minute
                     })
                     .catch((error) => {
                         console.log('Service Worker registration failed:', error);
                     });
+                
+                // Listen for messages from service worker
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'SW_UPDATE') {
+                        console.log('Service Worker update detected, version:', event.data.version);
+                        // Optionally show a notification to user or auto-reload
+                        if (confirm('A new version is available. Reload now?')) {
+                            window.location.reload();
+                        }
+                    }
+                });
             });
         }
     </script>

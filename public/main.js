@@ -312,20 +312,31 @@ class VocabTrainer {
 
             const serverProgress = await window.firebaseSyncManager.loadProgress();
             const serverWordCount = Object.keys(serverProgress?.wordProgress || {}).length;
+            const serverTimestamp = serverProgress?.localModifiedAt || 0;
+            const localTimestamp = localProgress?.localModifiedAt || 0;
             
             console.log('📥 Server returned:', serverProgress ? `${serverWordCount} words` : 'null');
+            if (serverTimestamp) {
+                console.log(`   - Server timestamp: ${new Date(serverTimestamp).toLocaleTimeString()}`);
+            }
+            if (localTimestamp) {
+                console.log(`   - Local timestamp: ${new Date(localTimestamp).toLocaleTimeString()}`);
+            }
 
+            // CRITICAL: If server has data, ALWAYS respect it (it's the source of truth)
             if (serverProgress && serverWordCount > 0) {
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
                     console.log('📥 New device - using Firebase data directly (no merge)');
                     this.progress = serverProgress;
                 } else {
-                    // EXISTING DEVICE: Merge Firebase + Local, keeping most progress
-                    console.log('📥 Existing device - merging Firebase with local');
+                    // EXISTING DEVICE: Merge Firebase + Local, but server data takes precedence
+                    console.log('📥 Existing device - merging Firebase with local (server data respected)');
+                    // Merge but ensure server data is preserved (mergeProgress already does this by taking max/true values)
                     this.progress = this.mergeProgress(localProgress, serverProgress);
                 }
                 
+                // Update localModifiedAt to current time after merge/load
                 this.progress.localModifiedAt = Date.now();
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                 
@@ -339,17 +350,28 @@ class VocabTrainer {
                     console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
                 });
                 
-                // Only sync back if existing device has MORE progress than server
-                if (!isNewDevice && finalWordCount > serverWordCount) {
-                    console.log('📤 Local has additional progress, syncing back to Firebase...');
+                // CRITICAL: Only sync back if local is NEWER than server AND has more progress
+                // This prevents old local data from overwriting newer server data
+                if (!isNewDevice && localTimestamp > serverTimestamp && finalWordCount > serverWordCount) {
+                    console.log('📤 Local is newer and has more progress, syncing back to Firebase...');
                     window.firebaseSyncManager.saveProgress(this.progress);
+                } else if (!isNewDevice && localTimestamp > serverTimestamp) {
+                    console.log('📤 Local is newer (but server has more words), syncing back to Firebase...');
+                    // Even if server has more words, if local is newer, sync it (performSync will do timestamp check)
+                    window.firebaseSyncManager.saveProgress(this.progress);
+                } else {
+                    console.log('📭 Not syncing back - server data is newer or equal, or local has less progress');
                 }
-            } else if (serverProgress === null && localWordCount > 0) {
-                // No server data but we have local data - upload it
+            } else if (serverProgress === null && hasActualProgress) {
+                // No server data but we have local data with actual progress - upload it
                 console.log('📤 No server data, uploading local progress to Firebase...');
                 window.firebaseSyncManager.saveProgress(localProgress);
+            } else if (serverProgress === null && !hasActualProgress) {
+                // No server data and no local progress - this is fine, just continue
+                console.log('📭 No progress found (server or local) - starting fresh');
             } else {
-                console.log('📭 No progress found (server or local)');
+                // Server returned empty/null progress - don't overwrite with local
+                console.log('📭 Server has no progress data - keeping local data but not uploading');
             }
             
             // Process any queued updates ONLY if this is NOT a new device
@@ -1273,7 +1295,8 @@ class VocabTrainer {
             return;
         }
         
-        container.innerHTML = '';
+        // Show loading state
+        container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-light);">Loading lessons...</div>';
         
         // Progress is already loaded in showDashboard, no need to reload here
         // getWordProgress will reload if needed
@@ -1291,144 +1314,146 @@ class VocabTrainer {
         // Load progress once before the loop (getWordProgress will reload if needed)
         this.progress = this.loadProgress();
         
-        // Debug: Log what's in progress
-        const progressWordIds = Object.keys(this.progress.wordProgress || {});
-        console.log(`📊 Progress contains ${progressWordIds.length} words:`, progressWordIds.slice(0, 10).join(', '), progressWordIds.length > 10 ? '...' : '');
-        
-        // Debug: Log first lesson's word IDs for comparison
-        if (lessons.length > 0 && lessons[0].items) {
-            const lesson1WordIds = lessons[0].items.map(item => item.id);
-            console.log(`📝 Lesson 1 word IDs:`, lesson1WordIds.slice(0, 5).join(', '), '...');
-        }
-        
-        lessons.forEach(lessonData => {
-            const card = document.createElement('div');
-            card.className = 'lesson-card';
-            
-            const mastered = this.isLessonMastered(this.currentBook, lessonData.lesson);
-            const unlocked = this.isLessonUnlocked(this.currentBook, lessonData.lesson);
-            
-            // Debug: Check why lesson is unlocked
-            if (unlocked && lessonData.lesson > 1) {
-                const prevLessonStatus = this.getLessonStatus(this.currentBook, lessonData.lesson - 1);
-                console.log(`  🔍 Lesson ${lessonData.lesson} is unlocked. Previous lesson (${lessonData.lesson - 1}) status:`, prevLessonStatus);
+        // Cache progress lookups for performance
+        const progressCache = new Map();
+        const getCachedWordProgress = (wordId) => {
+            if (!progressCache.has(wordId)) {
+                progressCache.set(wordId, this.getWordProgress(wordId));
             }
+            return progressCache.get(wordId);
+        };
+        
+        // Use requestAnimationFrame to batch rendering and avoid blocking UI
+        const fragment = document.createDocumentFragment();
+        let lessonIndex = 0;
+        
+        const renderBatch = () => {
+            const batchSize = 5; // Render 5 lessons per frame
+            const endIndex = Math.min(lessonIndex + batchSize, lessons.length);
             
-            console.log(`  Lesson ${lessonData.lesson}: unlocked=${unlocked}, mastered=${mastered}`);
-            
-            // Count tests completed (3 tests per lesson: English→Arabic, Arabic→English, Mixed)
-            const totalWords = lessonData.items.length;
-            let englishArabicComplete = 0;
-            let arabicEnglishComplete = 0;
-            let mixedComplete = 0;
-            
-            lessonData.items.forEach(item => {
-                const wp = this.getWordProgress(item.id);
-                if (wp.english_arabic_correct) englishArabicComplete++;
-                if (wp.arabic_english_correct) arabicEnglishComplete++;
-                if (wp.mixed_correct) mixedComplete++;
-            });
-            
-            // A test is complete if all words are correct for that mode
-            // Mixed mode only requires 75% of words to be complete
-            const mixedTarget = Math.ceil(totalWords * 0.75);
-            let testsCompleted = 0;
-            if (englishArabicComplete === totalWords) testsCompleted++;
-            if (arabicEnglishComplete === totalWords) testsCompleted++;
-            if (mixedComplete >= mixedTarget) testsCompleted++;
-            
-            let status = 'locked';
-            let statusText = 'Locked';
-            
-            // Check if all 3 modes are complete
-            const allModesComplete = this.areAllModesComplete(this.currentBook, lessonData.lesson);
-            
-            // Check if there's any actual progress (words attempted or mode flags set)
-            let progressCount = 0;
-            const hasProgress = lessonData.items.some(item => {
-                const wp = this.getWordProgress(item.id);
-                // Check counts OR mode-specific completion flags
-                const hasAny = wp.correct_count > 0 || wp.incorrect_count > 0 || 
-                       wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct;
-                if (hasAny) progressCount++;
-                return hasAny;
-            });
-            
-            // Debug: Log progress details for each lesson
-            console.log(`  📊 Lesson ${lessonData.lesson}: E→A=${englishArabicComplete}/${totalWords}, A→E=${arabicEnglishComplete}/${totalWords}, Mixed=${mixedComplete}/${totalWords}, hasProgress=${hasProgress} (${progressCount} words with progress)`);
-            
-            // Extra debug for lessons with progress
-            if (englishArabicComplete > 0 || arabicEnglishComplete > 0 || mixedComplete > 0 || progressCount > 0) {
-                console.log(`     🔍 Lesson ${lessonData.lesson} word details:`);
-                lessonData.items.slice(0, 3).forEach(item => {
-                    const wpDetail = this.progress.wordProgress?.[item.id];
-                    console.log(`        - ${item.id}: found=${!!wpDetail}, data=`, wpDetail || 'NOT FOUND');
+            for (let i = lessonIndex; i < endIndex; i++) {
+                const lessonData = lessons[i];
+                const card = document.createElement('div');
+                card.className = 'lesson-card';
+                
+                const mastered = this.isLessonMastered(this.currentBook, lessonData.lesson);
+                const unlocked = this.isLessonUnlocked(this.currentBook, lessonData.lesson);
+                
+                // Count tests completed (3 tests per lesson: English→Arabic, Arabic→English, Mixed)
+                const totalWords = lessonData.items.length;
+                let englishArabicComplete = 0;
+                let arabicEnglishComplete = 0;
+                let mixedComplete = 0;
+                
+                lessonData.items.forEach(item => {
+                    const wp = getCachedWordProgress(item.id);
+                    if (wp.english_arabic_correct) englishArabicComplete++;
+                    if (wp.arabic_english_correct) arabicEnglishComplete++;
+                    if (wp.mixed_correct) mixedComplete++;
                 });
-            }
-            
-            if (allModesComplete) {
-                status = 'completed';
-                statusText = 'Completed';
-                card.classList.add('completed');
-            } else if (unlocked && hasProgress) {
-                // Only show "In Progress" if unlocked AND there's actual progress
-                status = 'in-progress';
-                statusText = 'In Progress';
-                card.classList.add('in-progress');
-            } else if (unlocked && !hasProgress) {
-                // Unlocked but no progress yet - show as unlocked but don't add in-progress styling
-                status = 'unlocked';
-                statusText = 'Unlocked';
-                // Don't add 'in-progress' class, just leave it unlocked (clickable)
-            } else {
-                status = 'locked';
-                statusText = 'Locked';
-                card.classList.add('locked');
-            }
-            
-            // Build stats text - show tests completed AND unique word count
-            let statsText = `Tests: ${testsCompleted}/3 (${totalWords} words)`;
-            
-            card.innerHTML = `
-                <div class="lesson-header">
-                    <span class="lesson-title">${lessonData.lesson_label}</span>
-                    <span class="lesson-status ${status}">${statusText}</span>
-                </div>
-                <div class="lesson-stats">
-                    ${statsText}
-                </div>
-            `;
-            
-            if (unlocked) {
-                card.style.cursor = 'pointer';
-                // Use both click and mousedown to ensure it works
-                const handleClick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`🖱️ Clicked on lesson ${lessonData.lesson} (Book ${this.currentBook})`);
-                    try {
-                        this.showLessonView(this.currentBook, lessonData.lesson);
-                    } catch (error) {
-                        console.error('Error showing lesson view:', error);
-                        alert('Error loading lesson: ' + error.message);
-                    }
-                };
-                card.addEventListener('click', handleClick);
-                card.addEventListener('mousedown', (e) => {
-                    if (e.button === 0) { // Left click only
+                
+                // A test is complete if all words are correct for that mode
+                // Mixed mode only requires 75% of words to be complete
+                const mixedTarget = Math.ceil(totalWords * 0.75);
+                let testsCompleted = 0;
+                if (englishArabicComplete === totalWords) testsCompleted++;
+                if (arabicEnglishComplete === totalWords) testsCompleted++;
+                if (mixedComplete >= mixedTarget) testsCompleted++;
+                
+                let status = 'locked';
+                let statusText = 'Locked';
+                
+                // Check if all 3 modes are complete
+                const allModesComplete = this.areAllModesComplete(this.currentBook, lessonData.lesson);
+                
+                // Check if there's any actual progress (words attempted or mode flags set)
+                let progressCount = 0;
+                const hasProgress = lessonData.items.some(item => {
+                    const wp = getCachedWordProgress(item.id);
+                    // Check counts OR mode-specific completion flags
+                    const hasAny = wp.correct_count > 0 || wp.incorrect_count > 0 || 
+                           wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct;
+                    if (hasAny) progressCount++;
+                    return hasAny;
+                });
+                
+                if (allModesComplete) {
+                    status = 'completed';
+                    statusText = 'Completed';
+                    card.classList.add('completed');
+                } else if (unlocked && hasProgress) {
+                    // Only show "In Progress" if unlocked AND there's actual progress
+                    status = 'in-progress';
+                    statusText = 'In Progress';
+                    card.classList.add('in-progress');
+                } else if (unlocked && !hasProgress) {
+                    // Unlocked but no progress yet - show as unlocked but don't add in-progress styling
+                    status = 'unlocked';
+                    statusText = 'Unlocked';
+                    // Don't add 'in-progress' class, just leave it unlocked (clickable)
+                } else {
+                    status = 'locked';
+                    statusText = 'Locked';
+                    card.classList.add('locked');
+                }
+                
+                // Build stats text - show tests completed AND unique word count
+                let statsText = `Tests: ${testsCompleted}/3 (${totalWords} words)`;
+                
+                card.innerHTML = `
+                    <div class="lesson-header">
+                        <span class="lesson-title">${lessonData.lesson_label}</span>
+                        <span class="lesson-status ${status}">${statusText}</span>
+                    </div>
+                    <div class="lesson-stats">
+                        ${statsText}
+                    </div>
+                `;
+                
+                if (unlocked) {
+                    card.style.cursor = 'pointer';
+                    // Use both click and mousedown to ensure it works
+                    const handleClick = (e) => {
                         e.preventDefault();
-                    }
-                });
-            } else {
-                card.style.cursor = 'not-allowed';
-                // Add a tooltip or message for locked lessons
-                card.title = 'Complete the previous lesson to unlock this one';
+                        e.stopPropagation();
+                        console.log(`🖱️ Clicked on lesson ${lessonData.lesson} (Book ${this.currentBook})`);
+                        try {
+                            this.showLessonView(this.currentBook, lessonData.lesson);
+                        } catch (error) {
+                            console.error('Error showing lesson view:', error);
+                            alert('Error loading lesson: ' + error.message);
+                        }
+                    };
+                    card.addEventListener('click', handleClick);
+                    card.addEventListener('mousedown', (e) => {
+                        if (e.button === 0) { // Left click only
+                            e.preventDefault();
+                        }
+                    });
+                } else {
+                    card.style.cursor = 'not-allowed';
+                    // Add a tooltip or message for locked lessons
+                    card.title = 'Complete the previous lesson to unlock this one';
+                }
+                
+                fragment.appendChild(card);
             }
             
-            container.appendChild(card);
-        });
+            lessonIndex = endIndex;
+            
+            // If more lessons to render, schedule next batch
+            if (lessonIndex < lessons.length) {
+                requestAnimationFrame(renderBatch);
+            } else {
+                // All lessons rendered, append fragment to container
+                container.innerHTML = '';
+                container.appendChild(fragment);
+                console.log('✅ Lessons list rendered');
+            }
+        };
         
-        console.log('✅ Lessons list rendered');
+        // Start rendering
+        requestAnimationFrame(renderBatch);
     }
     
     updateGlobalStats() {

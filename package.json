@@ -5,7 +5,12 @@
   "scripts": {
     "extract": "node scripts/extract_vocab.js",
     "extract-ocr": "node scripts/extract_from_ocr.js",
-    "deploy": "npx firebase-tools deploy --only hosting",
+    "version": "node scripts/update-version.js",
+    "version:patch": "node scripts/update-version.js --patch",
+    "version:minor": "node scripts/update-version.js --minor",
+    "version:major": "node scripts/update-version.js --major",
+    "version:force": "node scripts/update-version.js --force",
+    "deploy": "node scripts/update-version.js && npx firebase-tools deploy --only hosting",
     "serve": "npx firebase-tools serve",
     "login": "npx firebase-tools login",
     "hosting:deploy": "npx firebase-tools deploy --only hosting"
