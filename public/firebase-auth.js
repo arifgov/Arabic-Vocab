@@ -105,7 +105,12 @@ class FirebaseAuth {
                 console.log('ℹ️ No redirect result');
             }
         } catch (error) {
-            console.error('❌ Error checking redirect result:', error.message);
+            // IndexedDB errors are common and can be ignored - Firebase will retry
+            if (error.message && error.message.includes('IndexedDB')) {
+                console.warn('⚠️ IndexedDB error during redirect check (will retry):', error.message);
+            } else {
+                console.error('❌ Error checking redirect result:', error.message);
+            }
         }
         
         // If not already ready, wait for first auth state (with longer timeout for slow connections)

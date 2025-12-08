@@ -26,15 +26,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
       console.log('Service Worker: Caching static files');
-      // Add version query param to bust cache
-      const versionedFiles = STATIC_FILES.map(file => {
-        const separator = file.includes('?') ? '&' : '?';
-        return file + separator + 'v=' + APP_VERSION;
-      });
-      return cache.addAll(versionedFiles).catch((err) => {
-        // If versioned files fail, try original files
-        console.warn('Failed to cache versioned files, trying originals:', err);
-        return cache.addAll(STATIC_FILES);
+      // Cache actual files (without version params - those are only in HTML for cache busting)
+      // The service worker cache is versioned by cache name, not file URLs
+      return cache.addAll(STATIC_FILES).catch((err) => {
+        console.warn('Failed to cache some files:', err);
+        // Continue even if some files fail to cache
+        return Promise.resolve();
       });
     })
   );
@@ -72,9 +69,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip Firebase and external requests
-  if (url.origin.includes('firebase') || url.origin.includes('googleapis') || url.origin.includes('gstatic')) {
-    return; // Let these go to network
+  // Skip Firebase and external requests - CRITICAL: Don't intercept Firebase requests
+  // Firebase uses IndexedDB and needs direct network access
+  if (url.origin.includes('firebase') || 
+      url.origin.includes('googleapis') || 
+      url.origin.includes('gstatic') ||
+      url.origin.includes('google.com') ||
+      url.origin.includes('accounts.google.com')) {
+    return; // Let these go to network - don't cache or intercept
   }
 
   // Skip chrome-extension and other unsupported schemes

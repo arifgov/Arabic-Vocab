@@ -64,15 +64,40 @@ class VocabTrainer {
     
     async init() {
         console.log('🚀 App init() started');
-        // Initialize Firebase
-        await this.initFirebase();
-        console.log('✅ initFirebase() completed');
         
-        // Check auth state and show login if needed
-        // This waits for auth to be fully ready before deciding what to show
-        console.log('🔄 Calling checkAuthState()...');
-        await this.checkAuthState();
-        console.log('✅ checkAuthState() completed');
+        try {
+            // Initialize Firebase with timeout to prevent infinite waiting
+            const firebaseInitPromise = this.initFirebase();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Firebase initialization timeout')), 10000)
+            );
+            
+            await Promise.race([firebaseInitPromise, timeoutPromise]);
+            console.log('✅ initFirebase() completed');
+        } catch (error) {
+            console.error('⚠️ Firebase initialization error or timeout:', error);
+            // Continue without Firebase - app can work offline
+        }
+        
+        try {
+            // Check auth state and show login if needed
+            // This waits for auth to be fully ready before deciding what to show
+            console.log('🔄 Calling checkAuthState()...');
+            const checkAuthPromise = this.checkAuthState();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+            );
+            
+            await Promise.race([checkAuthPromise, timeoutPromise]);
+            console.log('✅ checkAuthState() completed');
+        } catch (error) {
+            console.error('⚠️ Auth check error or timeout:', error);
+            // Continue - show login view if needed
+            const skippedLogin = localStorage.getItem('skipped_login');
+            if (!skippedLogin) {
+                this.showLoginView();
+            }
+        }
         
         await this.loadData();
         this.setupEventListeners();
