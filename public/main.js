@@ -1860,10 +1860,36 @@ class VocabTrainer {
                 }
             });
         } else {
-            // Regular practice: use all words (each word shown once)
-            // Don't filter by mastery - show all words once per session
-            // This allows users to review completed questions if they want
-            pool = [...lessonData.items];
+            // Regular practice: exclude words that are already completed in the current mode
+            // This ensures that when resuming on a new device, you only see remaining questions
+            // and don't have to redo questions you've already completed
+            const totalWords = lessonData.items.length;
+            pool = lessonData.items.filter(item => {
+                const wp = this.getWordProgress(item.id);
+                if (mode === 'english-arabic') {
+                    // Exclude words that are already correct in English→Arabic mode
+                    return !wp.english_arabic_correct;
+                } else if (mode === 'arabic-english') {
+                    // Exclude words that are already correct in Arabic→English mode
+                    return !wp.arabic_english_correct;
+                } else if (mode === 'mixed') {
+                    // Exclude words that are already correct in Mixed mode
+                    return !wp.mixed_correct;
+                }
+                // If mode is not specified, include all words (shouldn't happen, but be safe)
+                return true;
+            });
+            
+            const completedCount = totalWords - pool.length;
+            if (completedCount > 0) {
+                console.log(`📋 Question pool: ${pool.length} remaining questions (${completedCount} already completed in ${mode} mode)`);
+            }
+            
+            // If all words are already completed, still show them (user might want to review)
+            if (pool.length === 0) {
+                console.log(`📋 All words completed in ${mode} mode - showing all for review`);
+                pool = [...lessonData.items];
+            }
         }
         
         // If all words are mastered and not final test, still use all words for practice
