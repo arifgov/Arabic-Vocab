@@ -90,11 +90,21 @@ class VocabTrainer {
             }
         }
         
-        // Show dashboard - if user is logged in, syncProgressFromServer() in checkAuthState()
-        // or handleAuthStateChange() will have already loaded Firebase data to localStorage
-        // showDashboard() will load from localStorage, which will have the synced data
-        await this.showDashboard();
-        this.updateGlobalStats();
+        // Only show dashboard if user is logged in (not showing login view)
+        // If login view is shown, dashboard will be shown after login completes in handleAuthStateChange()
+        const loginView = document.getElementById('login-view');
+        const isLoginViewVisible = loginView && loginView.style.display !== 'none';
+        
+        if (!isLoginViewVisible) {
+            // User is logged in or skipped login, show dashboard
+            // If user is logged in, syncProgressFromServer() in checkAuthState()
+            // or handleAuthStateChange() will have already loaded Firebase data to localStorage
+            // showDashboard() will load from localStorage, which will have the synced data
+            await this.showDashboard();
+            this.updateGlobalStats();
+        } else {
+            console.log('📋 Login view is visible, dashboard will be shown after login');
+        }
     }
     
     async checkRedirectResult() {
@@ -226,30 +236,51 @@ class VocabTrainer {
                 console.log('🔄 Syncing with Firebase...');
                 await this.syncProgressFromServer();
                 
-                // CRITICAL: After syncing, ensure dashboard is shown and refreshed
+                // CRITICAL: After syncing, verify data was saved and ALWAYS show/refresh dashboard
                 // This is especially important for first-time login on a new device
-                const activeView = document.querySelector('.view.active');
-                const isDashboardActive = activeView && activeView.id === 'dashboard-view';
+                // Force reload progress from localStorage (which now has synced data)
+                const syncedProgress = this.loadProgress();
+                const syncedWordCount = Object.keys(syncedProgress.wordProgress || {}).length;
+                const hasSyncedProgress = Object.values(syncedProgress.wordProgress || {}).some(wp => 
+                    wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+                    wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+                );
                 
-                if (isDashboardActive) {
-                    // Dashboard is already showing, just refresh it
-                    console.log('🔄 Refreshing dashboard with synced data...');
-                    this.refreshCurrentView();
+                console.log('📊 After sync, progress loaded:', syncedWordCount, 'words');
+                console.log('   - Has actual progress:', hasSyncedProgress);
+                
+                // Verify data was actually synced
+                if (syncedWordCount === 0 && !hasSyncedProgress) {
+                    console.warn('⚠️ No progress found after sync - checking Firebase again...');
+                    // Try loading directly from Firebase one more time
+                    const directServerProgress = await window.firebaseSyncManager.loadProgress();
+                    if (directServerProgress && Object.keys(directServerProgress.wordProgress || {}).length > 0) {
+                        console.log('✅ Found progress in Firebase, saving to localStorage...');
+                        this.progress = directServerProgress;
+                        this.progress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                        console.log('✅ Progress saved to localStorage');
+                    }
                 } else {
-                    // Dashboard not shown yet, show it (this will load the synced data)
-                    console.log('🔄 Showing dashboard with synced data...');
-                    await this.showDashboard();
+                    this.progress = syncedProgress;
                 }
+                
+                // Hide login view first
+                this.hideLoginView();
+                
+                // Now show/refresh dashboard - this will use the synced data from localStorage
+                console.log('🔄 Showing dashboard with synced data...');
+                await this.showDashboard();
+                this.updateGlobalStats();
+                
+                console.log('✅ Login complete, dashboard shown with synced data');
             } catch (error) {
                 console.error('Error syncing progress:', error);
-                // Even if sync fails, show dashboard
-                const activeView = document.querySelector('.view.active');
-                if (!activeView || activeView.id !== 'dashboard-view') {
-                    await this.showDashboard();
-                }
+                // Even if sync fails, hide login and show dashboard
+                this.hideLoginView();
+                await this.showDashboard();
+                this.updateGlobalStats();
             }
-            this.hideLoginView();
-            console.log('✅ Login complete, UI updated');
         } else {
             console.log('ℹ️ User signed out');
             window.firebaseSyncManager.setUserId(null);
@@ -961,17 +992,29 @@ class VocabTrainer {
     
     async showDashboard() {
         // Reload progress from localStorage (synced data is already there)
+        // CRITICAL: Always reload from localStorage to get latest synced data
         this.progress = this.loadProgress();
         
+        const wordCount = Object.keys(this.progress.wordProgress || {}).length;
+        const hasActualProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
+            wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+            wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+        );
+        
         console.log('🏠 Dashboard: Loaded progress');
-        console.log('   - Words tracked:', Object.keys(this.progress.wordProgress || {}).length);
+        console.log('   - Words tracked:', wordCount);
+        console.log('   - Has actual progress:', hasActualProgress);
         
         // Log progress for first few words to verify data
-        const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
-        sampleIds.forEach(id => {
-            const wp = this.progress.wordProgress[id];
-            console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}, Mixed=${wp.mixed_correct}`);
-        });
+        if (wordCount > 0) {
+            const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
+            sampleIds.forEach(id => {
+                const wp = this.progress.wordProgress[id];
+                console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}, Mixed=${wp.mixed_correct}, correct=${wp.correct_count || 0}`);
+            });
+        } else {
+            console.log('   ⚠️ No word progress found in localStorage');
+        }
         
         this.showView('dashboard-view');
         this.renderLessonsList();
