@@ -1334,10 +1334,43 @@ class VocabTrainer {
     }
     
     initializeNewSession() {
+        // CRITICAL: Calculate how many questions have already been completed based on synced progress
+        // This ensures the counter shows correctly when resuming on a new device
+        let alreadyAttempted = 0;
+        let alreadyCorrect = 0;
+        let alreadyIncorrect = 0;
+        
+        if (this.currentBook && this.currentLesson) {
+            const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
+            if (lessonData) {
+                // Count questions that have been completed in the current mode
+                lessonData.items.forEach(item => {
+                    const wp = this.getWordProgress(item.id);
+                    // Check if this word has been completed in the current mode
+                    let isCompleted = false;
+                    if (this.currentMode === 'english-arabic') {
+                        isCompleted = wp.english_arabic_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
+                    } else if (this.currentMode === 'arabic-english') {
+                        isCompleted = wp.arabic_english_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
+                    } else if (this.currentMode === 'mixed') {
+                        isCompleted = wp.mixed_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
+                    }
+                    
+                    if (isCompleted) {
+                        alreadyAttempted++;
+                        if (wp.correct_count > 0) alreadyCorrect++;
+                        if (wp.incorrect_count > 0) alreadyIncorrect++;
+                    }
+                });
+            }
+        }
+        
+        console.log(`📊 Initializing new session: ${alreadyAttempted} questions already completed (${alreadyCorrect} correct, ${alreadyIncorrect} incorrect)`);
+        
         this.sessionStats = {
-            attempted: 0,
-            correct: 0,
-            incorrect: 0,
+            attempted: alreadyAttempted, // Start from where we left off, not 0
+            correct: alreadyCorrect,
+            incorrect: alreadyIncorrect,
             weakWords: []
         };
         
@@ -1358,6 +1391,20 @@ class VocabTrainer {
             this.currentMode
         );
         this.totalQuestions = this.questionPool.length;
+        
+        // CRITICAL: Adjust totalQuestions to account for already completed questions
+        // This ensures "Question X / Total" shows correctly (e.g., "Question 15 / 37" not "Question 1 / 23")
+        // The total should be the original lesson size, not just remaining questions
+        if (this.currentBook && this.currentLesson) {
+            const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
+            if (lessonData) {
+                // For regular practice, total should be all words in lesson
+                // For mixed mode or final test, it might be 75% of words, so keep the calculated total
+                if (!this.isFinalTest && this.currentMode !== 'mixed') {
+                    this.totalQuestions = lessonData.items.length;
+                }
+            }
+        }
     }
     
     saveSessionState() {
@@ -1815,6 +1862,7 @@ class VocabTrainer {
         } else {
             // Regular practice: use all words (each word shown once)
             // Don't filter by mastery - show all words once per session
+            // This allows users to review completed questions if they want
             pool = [...lessonData.items];
         }
         
