@@ -276,10 +276,11 @@ class VocabTrainer {
                 
                 // Verify data was actually synced - if not, try loading from Firebase directly
                 // This handles cases where syncProgressFromServer didn't load server data correctly
-                if (syncedWordCount === 0 && !hasSyncedProgress) {
-                    console.warn('⚠️ No progress found after sync - checking Firebase directly...');
+                // Check if we have NO actual progress (even if word entries exist from initializeProgress)
+                if (!hasSyncedProgress) {
+                    console.warn('⚠️ No actual progress found after sync - checking Firebase directly (may have timing issue)...');
                     // Wait a bit to ensure Firebase is fully ready
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     // Try loading directly from Firebase one more time
                     const directServerProgress = await window.firebaseSyncManager.loadProgress();
                     const directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
@@ -465,26 +466,24 @@ class VocabTrainer {
                 window.firebaseSyncManager.saveProgress(localProgress);
             } else if (serverProgress === null && !hasActualProgress) {
                 // No server data and no local progress - this is fine, just continue
-                // BUT: If this is a new device (no local progress), we should still check
-                // if server has data one more time, in case there was a timing issue
-                if (isNewDevice) {
-                    console.log('🔄 New device - double-checking Firebase (may have timing issue)...');
-                    // Try one more time with a small delay to ensure Firebase is ready
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    const retryServerProgress = await window.firebaseSyncManager.loadProgress();
-                    const retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
-                    if (retryServerProgress && retryWordCount > 0) {
-                        console.log(`✅ Found progress on retry (${retryWordCount} words), loading from Firebase...`);
-                        this.progress = retryServerProgress;
-                        this.progress.localModifiedAt = Date.now();
-                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                        console.log('✅ Progress saved to localStorage');
-                        return; // Exit early since we loaded server data
-                    } else {
-                        console.log(`📭 Retry also returned ${retryWordCount} words - no server data available`);
-                    }
+                // BUT: Always retry loading from Firebase on first login, in case there was a timing issue
+                // This is critical for new devices where Firebase might not be ready immediately
+                console.log('🔄 No server data found - retrying Firebase load (may have timing issue)...');
+                // Try one more time with a delay to ensure Firebase is fully ready
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                const retryServerProgress = await window.firebaseSyncManager.loadProgress();
+                const retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
+                if (retryServerProgress && retryWordCount > 0) {
+                    console.log(`✅ Found progress on retry (${retryWordCount} words), loading from Firebase...`);
+                    this.progress = retryServerProgress;
+                    this.progress.localModifiedAt = Date.now();
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                    console.log('✅ Progress saved to localStorage');
+                    return; // Exit early since we loaded server data
+                } else {
+                    console.log(`📭 Retry also returned ${retryWordCount} words - no server data available`);
+                    console.log('📭 No progress found (server or local) - starting fresh');
                 }
-                console.log('📭 No progress found (server or local) - starting fresh');
             } else {
                 // Server returned empty/null progress - don't overwrite with local
                 console.log('📭 Server has no progress data - keeping local data but not uploading');
@@ -708,7 +707,7 @@ class VocabTrainer {
     
     getWordProgress(id) {
         // Use cached progress if available (set by renderLessonsList or other methods)
-        // Only reload if progress is not already loaded
+        // Only reload if progress is not already loaded - this prevents hundreds of localStorage reads
         if (!this.progress || !this.progress.wordProgress) {
             const latestProgress = this.loadProgress();
             this.progress = latestProgress;
@@ -933,6 +932,11 @@ class VocabTrainer {
         const lessonData = this.books[book]?.find(l => l.lesson === lesson);
         if (!lessonData) return false;
         
+        // Ensure progress is loaded (but don't reload if already loaded)
+        if (!this.progress || !this.progress.wordProgress) {
+            this.progress = this.loadProgress();
+        }
+        
         const totalWords = lessonData.items.length;
         const mixedTarget = Math.ceil(totalWords * 0.75); // Mixed only needs 75%
         
@@ -941,7 +945,16 @@ class VocabTrainer {
         let mixedComplete = 0;
         
         lessonData.items.forEach(item => {
-            const wp = this.getWordProgress(item.id);
+            // Use this.progress directly instead of calling getWordProgress (which would reload)
+            const wp = this.progress.wordProgress[item.id] || {
+                correct_count: 0,
+                incorrect_count: 0,
+                consecutive_correct: 0,
+                mastered: false,
+                english_arabic_correct: false,
+                arabic_english_correct: false,
+                mixed_correct: false
+            };
             if (wp.english_arabic_correct) englishArabicComplete++;
             if (wp.arabic_english_correct) arabicEnglishComplete++;
             if (wp.mixed_correct) mixedComplete++;
@@ -1444,16 +1457,30 @@ class VocabTrainer {
         
         console.log(`📚 Rendering ${lessons.length} lessons for Book ${this.currentBook}`);
         
-        // Load progress once before the loop (getWordProgress will reload if needed)
-        this.progress = this.loadProgress();
-        
-        // Cache progress lookups for performance
         // CRITICAL: Load progress ONCE and cache it, so getWordProgress doesn't reload every time
+        // This prevents hundreds of localStorage reads during rendering
         this.progress = this.loadProgress();
         const progressCache = new Map();
         const getCachedWordProgress = (wordId) => {
             if (!progressCache.has(wordId)) {
-                progressCache.set(wordId, this.getWordProgress(wordId));
+                // Use this.progress directly instead of calling getWordProgress (which would reload)
+                if (!this.progress.wordProgress) {
+                    this.progress.wordProgress = {};
+                }
+                const wp = this.progress.wordProgress[wordId];
+                const result = wp || {
+                    correct_count: 0,
+                    incorrect_count: 0,
+                    consecutive_correct: 0,
+                    mastered: false,
+                    english_arabic_correct: false,
+                    arabic_english_correct: false,
+                    mixed_correct: false,
+                    session_english_arabic: false,
+                    session_arabic_english: false,
+                    session_mixed: false
+                };
+                progressCache.set(wordId, result);
             }
             return progressCache.get(wordId);
         };
