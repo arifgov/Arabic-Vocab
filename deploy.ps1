@@ -81,3 +81,5 @@ if ($firebaseAvailable) {
     Write-Host "  npx firebase-tools deploy         - Deploy your app" -ForegroundColor White
     Write-Host ""
 }
+
+

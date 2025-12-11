@@ -217,61 +217,47 @@ class FirebaseSync {
                 }
             }
             
-            // CRITICAL: Load existing server data to check timestamps and prevent overwriting newer data
+            // Load existing server data so we can merge by results instead of timestamps
             const existingDoc = await getDocFromServer(userRef).catch(() => getDoc(userRef)); // Try server first, fallback to cache
             const existingData = existingDoc.exists() ? existingDoc.data() : {};
             const serverLocalTimestamp = existingData.localTimestamp || 0;
-            const serverHasData = existingDoc.exists() && existingData.progress && 
-                (Object.keys(existingData.progress.wordProgress || {}).length > 0 ||
-                 Object.values(existingData.progress.lessonStatus || {}).some(book => 
-                     Object.values(book || {}).some(lesson => lesson.mastered || lesson.final_test_passed)
-                 ));
+            const serverProgress = this.getProgressTemplate(existingData.progress);
             
             console.log(`   - Server doc exists: ${existingDoc.exists()}`);
-            console.log(`   - Server has data: ${serverHasData}`);
+            console.log(`   - Server word count: ${Object.keys(serverProgress.wordProgress || {}).length}`);
             if (serverLocalTimestamp) {
                 console.log(`   - Server localTimestamp: ${serverLocalTimestamp} (${new Date(serverLocalTimestamp).toLocaleTimeString()})`);
             }
             console.log(`   - Local modified at: ${localModifiedAt} (${new Date(localModifiedAt).toLocaleTimeString()})`);
             
-            // CRITICAL SAFEGUARD: Never overwrite server data if it's newer than local
-            if (serverHasData && serverLocalTimestamp > localModifiedAt) {
-                console.warn('⚠️ SKIPPING SYNC - Server data is NEWER than local data!');
-                console.warn(`   - Server timestamp: ${new Date(serverLocalTimestamp).toLocaleTimeString()}`);
-                console.warn(`   - Local timestamp: ${new Date(localModifiedAt).toLocaleTimeString()}`);
-                console.warn('   - This prevents older local data from overwriting newer server data');
+            // Merge by result: keep whichever side has higher counts/flags
+            const mergedProgress = this.mergeProgressData(serverProgress, sanitizedProgress);
+            const hasNewProgress = this.hasProgressGain(mergedProgress, serverProgress);
+            
+            if (!hasNewProgress) {
+                console.log('📭 No progress gain compared to server - skipping write');
                 this.syncing = false;
                 return false;
             }
             
-            // Additional safeguard: If server has substantial data but local has very little, be cautious
-            const serverWordCount = Object.keys(existingData.progress?.wordProgress || {}).length;
-            const localWordCount = wordsWithProgress;
-            if (serverHasData && serverWordCount > 10 && localWordCount < 5) {
-                console.warn('⚠️ SKIPPING SYNC - Server has substantial data but local has very little');
-                console.warn(`   - Server words: ${serverWordCount}, Local words: ${localWordCount}`);
-                console.warn('   - This prevents empty/minimal local data from overwriting substantial server data');
-                this.syncing = false;
-                return false;
-            }
+            const mergedTimestamp = Math.max(serverLocalTimestamp || 0, localModifiedAt || syncStartTime);
             
-            // Build complete document - replace progress completely, preserve email/name
+            // Build complete document with merged results
             const completeData = {
-                progress: sanitizedProgress, // COMPLETE REPLACEMENT - no merging (sanitized to remove undefined)
+                progress: mergedProgress,
                 lastSync: serverTimestamp(), // Use Firestore serverTimestamp() function for lastSync
                 updatedAt: new Date().toISOString(),
-                localTimestamp: syncStartTime, // Use sync start time as the version
+                localTimestamp: mergedTimestamp,
                 // Preserve email/name from existing or use current user info
                 email: userEmail || existingData.email || null,
                 name: userName || existingData.name || existingData.displayName || null,
                 displayName: userName || existingData.displayName || existingData.name || null
             };
             
-            console.log('   - Sanitized progress word count:', Object.keys(sanitizedProgress.wordProgress).length);
+            console.log('   - Sanitized+merged progress word count:', Object.keys(mergedProgress.wordProgress).length);
             
-            // Replace entire document - this ensures progress is completely overwritten
-            // BUT only if we passed all the safeguards above
-            console.log('   - About to write to Firestore (passed all safeguards)...');
+            // Replace entire document with merged (server-winning) progress
+            console.log('   - About to write merged progress to Firestore...');
             await setDoc(userRef, completeData);
 
             this.lastSyncTime = Date.now();
@@ -424,6 +410,116 @@ class FirebaseSync {
             // Don't throw - gracefully fall back to local storage
             return null;
         }
+    }
+    
+    getProgressTemplate(progress = {}) {
+        return {
+            wordProgress: progress.wordProgress || {},
+            lessonStatus: progress.lessonStatus || { 1: {}, 2: {} },
+            lastBook: progress.lastBook || null,
+            lastLesson: progress.lastLesson || null,
+            lastMode: progress.lastMode || null
+        };
+    }
+    
+    mergeProgressData(serverProgress = {}, localProgress = {}) {
+        const server = this.getProgressTemplate(serverProgress);
+        const local = this.getProgressTemplate(localProgress);
+        const merged = {
+            wordProgress: {},
+            lessonStatus: { 1: {}, 2: {} },
+            lastBook: local.lastBook || server.lastBook,
+            lastLesson: local.lastLesson || server.lastLesson,
+            lastMode: local.lastMode || server.lastMode
+        };
+        
+        const allWordIds = new Set([
+            ...Object.keys(server.wordProgress || {}),
+            ...Object.keys(local.wordProgress || {})
+        ]);
+        
+        allWordIds.forEach(id => {
+            const serverWp = server.wordProgress?.[id] || {};
+            const localWp = local.wordProgress?.[id] || {};
+            merged.wordProgress[id] = {
+                correct_count: Math.max(serverWp.correct_count || 0, localWp.correct_count || 0),
+                incorrect_count: Math.max(serverWp.incorrect_count || 0, localWp.incorrect_count || 0),
+                consecutive_correct: Math.max(serverWp.consecutive_correct || 0, localWp.consecutive_correct || 0),
+                mastered: (serverWp.mastered || localWp.mastered) || false,
+                english_arabic_correct: (serverWp.english_arabic_correct || localWp.english_arabic_correct) || false,
+                arabic_english_correct: (serverWp.arabic_english_correct || localWp.arabic_english_correct) || false,
+                mixed_correct: (serverWp.mixed_correct || localWp.mixed_correct) || false,
+                session_english_arabic: localWp.session_english_arabic || false,
+                session_arabic_english: localWp.session_arabic_english || false,
+                session_mixed: localWp.session_mixed || false
+            };
+        });
+        
+        for (const book of [1, 2]) {
+            const serverLessons = server.lessonStatus?.[book] || {};
+            const localLessons = local.lessonStatus?.[book] || {};
+            const allLessons = new Set([
+                ...Object.keys(serverLessons),
+                ...Object.keys(localLessons)
+            ]);
+            
+            allLessons.forEach(lesson => {
+                const serverStatus = serverLessons[lesson] || {};
+                const localStatus = localLessons[lesson] || {};
+                merged.lessonStatus[book][lesson] = {
+                    mastered: (serverStatus.mastered || localStatus.mastered) || false,
+                    final_test_passed: (serverStatus.final_test_passed || localStatus.final_test_passed) || false,
+                    date_completed: localStatus.date_completed || serverStatus.date_completed || null
+                };
+            });
+        }
+        
+        return merged;
+    }
+    
+    hasProgressGain(candidateProgress = {}, serverProgress = {}) {
+        const candidate = this.getProgressTemplate(candidateProgress);
+        const server = this.getProgressTemplate(serverProgress);
+        
+        const allWordIds = new Set([
+            ...Object.keys(candidate.wordProgress || {}),
+            ...Object.keys(server.wordProgress || {})
+        ]);
+        
+        for (const id of allWordIds) {
+            const cand = candidate.wordProgress?.[id] || {};
+            const serv = server.wordProgress?.[id] || {};
+            if (
+                (cand.correct_count || 0) > (serv.correct_count || 0) ||
+                (cand.incorrect_count || 0) > (serv.incorrect_count || 0) ||
+                (cand.consecutive_correct || 0) > (serv.consecutive_correct || 0) ||
+                (!!cand.mastered && !serv.mastered) ||
+                (!!cand.english_arabic_correct && !serv.english_arabic_correct) ||
+                (!!cand.arabic_english_correct && !serv.arabic_english_correct) ||
+                (!!cand.mixed_correct && !serv.mixed_correct)
+            ) {
+                return true;
+            }
+        }
+        
+        for (const book of [1, 2]) {
+            const candLessons = candidate.lessonStatus?.[book] || {};
+            const servLessons = server.lessonStatus?.[book] || {};
+            const lessonIds = new Set([
+                ...Object.keys(candLessons),
+                ...Object.keys(servLessons)
+            ]);
+            
+            for (const lesson of lessonIds) {
+                const cand = candLessons[lesson] || {};
+                const serv = servLessons[lesson] || {};
+                if ((cand.mastered && !serv.mastered) || (cand.final_test_passed && !serv.final_test_passed)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     async processSyncQueue() {

@@ -56,3 +56,5 @@ After updating the rules:
 
 - ⚠️ These rules allow the admin to access all user data. Make sure only the admin email is trusted.
 - To add more admins in the future, you can modify the `isAdmin()` function to check multiple emails or use a custom claim.
+
+

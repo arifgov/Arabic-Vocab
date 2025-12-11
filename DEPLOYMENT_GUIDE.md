@@ -219,3 +219,5 @@ cd "d:\MyApps\Arabic Vocab" && firebase deploy --only hosting
 - **Firestore**: Free tier (1 GB storage, 50K reads/day)
 
 For a small app like this, you should stay well within the free tier!
+
+

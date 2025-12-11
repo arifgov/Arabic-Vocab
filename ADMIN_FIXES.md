@@ -49,3 +49,5 @@ If you want to manually add email/name for existing users:
    - `email`: user's email address
    - `name`: user's display name
 4. Save the document
+
+

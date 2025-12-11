@@ -82,3 +82,5 @@ npm run deploy
 Your app will be live at:
 - https://arabic-vocab-trainer.web.app
 - https://arabic-vocab-trainer.firebaseapp.com
+
+

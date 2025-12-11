@@ -1334,43 +1334,16 @@ class VocabTrainer {
     }
     
     initializeNewSession() {
-        // CRITICAL: Calculate how many questions have already been completed based on synced progress
-        // This ensures the counter shows correctly when resuming on a new device
-        let alreadyAttempted = 0;
-        let alreadyCorrect = 0;
-        let alreadyIncorrect = 0;
+        const lessonData = this.currentBook && this.currentLesson
+            ? this.books[this.currentBook].find(l => l.lesson === this.currentLesson)
+            : null;
+        const totalWordsInLesson = lessonData?.items.length || 0;
         
-        if (this.currentBook && this.currentLesson) {
-            const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
-            if (lessonData) {
-                // Count questions that have been completed in the current mode
-                lessonData.items.forEach(item => {
-                    const wp = this.getWordProgress(item.id);
-                    // Check if this word has been completed in the current mode
-                    let isCompleted = false;
-                    if (this.currentMode === 'english-arabic') {
-                        isCompleted = wp.english_arabic_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
-                    } else if (this.currentMode === 'arabic-english') {
-                        isCompleted = wp.arabic_english_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
-                    } else if (this.currentMode === 'mixed') {
-                        isCompleted = wp.mixed_correct || wp.correct_count > 0 || wp.incorrect_count > 0;
-                    }
-                    
-                    if (isCompleted) {
-                        alreadyAttempted++;
-                        if (wp.correct_count > 0) alreadyCorrect++;
-                        if (wp.incorrect_count > 0) alreadyIncorrect++;
-                    }
-                });
-            }
-        }
-        
-        console.log(`📊 Initializing new session: ${alreadyAttempted} questions already completed (${alreadyCorrect} correct, ${alreadyIncorrect} incorrect)`);
-        
+        // Start with a clean slate; we will set attempted/correct based on mode-specific completion
         this.sessionStats = {
-            attempted: alreadyAttempted, // Start from where we left off, not 0
-            correct: alreadyCorrect,
-            incorrect: alreadyIncorrect,
+            attempted: 0,
+            correct: 0,
+            incorrect: 0,
             weakWords: []
         };
         
@@ -1396,7 +1369,6 @@ class VocabTrainer {
         // This ensures "Question X / Total" shows correctly (e.g., "Question 15 / 37" not "Question 1 / 23")
         // The total should be the original lesson size, not just remaining questions
         if (this.currentBook && this.currentLesson) {
-            const lessonData = this.books[this.currentBook].find(l => l.lesson === this.currentLesson);
             if (lessonData) {
                 // For regular practice, total should be all words in lesson
                 // For mixed mode or final test, it might be 75% of words, so keep the calculated total
@@ -1404,6 +1376,19 @@ class VocabTrainer {
                     this.totalQuestions = lessonData.items.length;
                 }
             }
+        }
+        
+        // Derive attempted counts purely from mode-specific completion to avoid cross-mode inflation
+        // Completed in mode = total words for the mode minus remaining pool
+        if (!this.reviewMistakesOnly && !this.isFinalTest && lessonData) {
+            const remainingQuestions = this.questionPool.length;
+            const completedInMode = Math.max(0, this.totalQuestions - remainingQuestions);
+            this.sessionStats.attempted = completedInMode;
+            this.sessionStats.correct = completedInMode;
+            this.sessionStats.incorrect = 0; // We can't reliably track past incorrects per mode across devices
+            console.log(`📊 Session seeded from progress: ${completedInMode} completed in ${this.currentMode}, ${remainingQuestions} remaining`);
+        } else {
+            console.log('📊 Session seeded fresh (review/final test or no lesson data)');
         }
     }
     
@@ -2331,8 +2316,11 @@ class VocabTrainer {
     }
     
     updateQuestionStats() {
-        const questionNumber = this.sessionStats.attempted + 1;
         const totalQuestions = this.totalQuestions || 0;
+        const rawQuestionNumber = this.sessionStats.attempted + 1;
+        const questionNumber = totalQuestions > 0
+            ? Math.min(rawQuestionNumber, totalQuestions)
+            : rawQuestionNumber;
         const remaining = this.questionPool.length;
         
         // Show progress: "Question X / Total" or "Question X" if total not set
@@ -2754,6 +2742,23 @@ class VocabTrainer {
                 this.pushHistoryState('dashboard');
             });
         }
+        
+        // Sync on tab hide/refresh/navigation to prevent losing newer progress
+        window.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                this.saveSessionState();
+                if (window.firebaseSyncManager?.syncEnabled) {
+                    window.firebaseSyncManager.forceSync();
+                }
+            }
+        });
+        
+        window.addEventListener('beforeunload', () => {
+            this.saveSessionState();
+            if (window.firebaseSyncManager?.syncEnabled) {
+                window.firebaseSyncManager.forceSync();
+            }
+        });
     }
     
     // Authentication handlers
