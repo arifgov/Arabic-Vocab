@@ -278,38 +278,26 @@ class VocabTrainer {
                 // This handles cases where syncProgressFromServer didn't load server data correctly
                 // Check if we have NO actual progress (even if word entries exist from initializeProgress)
                 if (!hasSyncedProgress) {
-                    console.warn('⚠️ No actual progress found after sync - checking Firebase directly with multiple retries (may have timing issue)...');
-                    
-                    // Try multiple times with increasing delays
-                    const retryDelays = [2500, 3500, 5000]; // 2.5s, 3.5s, 5s delays
-                    let directServerProgress = null;
-                    let directWordCount = 0;
-                    
-                    for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-                        console.log(`🔄 Direct Firebase retry attempt ${attempt + 1}/${retryDelays.length} (waiting ${retryDelays[attempt]}ms)...`);
-                        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
-                        directServerProgress = await window.firebaseSyncManager.loadProgress();
-                        directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
-                        if (directServerProgress && directWordCount > 0) {
-                            console.log(`✅ Found progress in Firebase on attempt ${attempt + 1} (${directWordCount} words), saving to localStorage...`);
-                            this.progress = directServerProgress;
-                            this.progress.localModifiedAt = Date.now();
-                            localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                            console.log('✅ Progress saved to localStorage');
-                            syncedProgress = this.progress;
-                            syncedWordCount = directWordCount;
-                            hasSyncedProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
-                                wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
-                                wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
-                            );
-                            break; // Found data, exit retry loop
-                        } else {
-                            console.log(`📭 Direct retry attempt ${attempt + 1} returned ${directWordCount} words`);
-                        }
-                    }
-                    
-                    if (!hasSyncedProgress) {
-                        console.log(`📭 All ${retryDelays.length} direct Firebase retry attempts returned no data - starting fresh`);
+                    console.warn('⚠️ No actual progress found after sync - checking Firebase directly (may have timing issue)...');
+                    // Wait a bit to ensure Firebase is fully ready
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    // Try loading directly from Firebase one more time
+                    const directServerProgress = await window.firebaseSyncManager.loadProgress();
+                    const directWordCount = Object.keys(directServerProgress?.wordProgress || {}).length;
+                    if (directServerProgress && directWordCount > 0) {
+                        console.log(`✅ Found progress in Firebase (${directWordCount} words), saving to localStorage...`);
+                        this.progress = directServerProgress;
+                        this.progress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                        console.log('✅ Progress saved to localStorage');
+                        syncedProgress = this.progress;
+                        syncedWordCount = directWordCount;
+                        hasSyncedProgress = Object.values(this.progress.wordProgress || {}).some(wp => 
+                            wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct ||
+                            wp.mastered || wp.correct_count > 0 || wp.incorrect_count > 0
+                        );
+                    } else {
+                        console.log(`📭 Firebase also has no data (${directWordCount} words) - starting fresh`);
                     }
                 }
                 
@@ -427,29 +415,15 @@ class VocabTrainer {
             // CRITICAL: If server has data, ALWAYS respect it (it's the source of truth)
             // Also handle case where serverProgress exists but wordProgress is empty (shouldn't happen, but be safe)
             if (serverProgress && serverWordCount > 0) {
-                // Calculate completed word counts for comparison
-                const serverCompletedCount = this.calculateCompletedWordCount(serverProgress);
-                const localCompletedCount = this.calculateCompletedWordCount(localProgress);
-                
-                console.log(`   - Server completed words: ${serverCompletedCount}`);
-                console.log(`   - Local completed words: ${localCompletedCount}`);
-                
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
                     console.log('📥 New device - using Firebase data directly (no merge)');
                     this.progress = serverProgress;
                 } else {
-                    // EXISTING DEVICE: Check if server has better progress
-                    // If server has MORE completed words, use server data directly (don't merge with worse local)
-                    if (serverCompletedCount > localCompletedCount) {
-                        console.log('📥 Server has MORE completed words - using server data directly (respecting better progress)');
-                        console.log(`   - Server: ${serverCompletedCount} completed, Local: ${localCompletedCount} completed`);
-                        this.progress = serverProgress;
-                    } else {
-                        // Merge Firebase + Local (mergeProgress already preserves most progress)
-                        console.log('📥 Existing device - merging Firebase with local (server data respected)');
-                        this.progress = this.mergeProgress(localProgress, serverProgress);
-                    }
+                    // EXISTING DEVICE: Merge Firebase + Local, but server data takes precedence
+                    console.log('📥 Existing device - merging Firebase with local (server data respected)');
+                    // Merge but ensure server data is preserved (mergeProgress already does this by taking max/true values)
+                    this.progress = this.mergeProgress(localProgress, serverProgress);
                 }
                 
                 // Update localModifiedAt to current time after merge/load
@@ -457,8 +431,7 @@ class VocabTrainer {
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                 
                 const finalWordCount = Object.keys(this.progress.wordProgress || {}).length;
-                const finalCompletedCount = this.calculateCompletedWordCount(this.progress);
-                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words,', finalCompletedCount, 'completed');
+                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words');
                 
                 // Log sample of saved data for verification
                 const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
@@ -467,14 +440,17 @@ class VocabTrainer {
                     console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
                 });
                 
-                // CRITICAL: Only sync back if local has MORE completed words than server
-                // This ensures we don't overwrite better progress (e.g., 19/37) with worse progress (e.g., 14/37)
-                if (!isNewDevice && finalCompletedCount > serverCompletedCount) {
-                    console.log(`📤 Local has MORE completed words (${finalCompletedCount} > ${serverCompletedCount}), syncing back to Firebase...`);
+                // CRITICAL: Only sync back if local is NEWER than server AND has more progress
+                // This prevents old local data from overwriting newer server data
+                if (!isNewDevice && localTimestamp > serverTimestamp && finalWordCount > serverWordCount) {
+                    console.log('📤 Local is newer and has more progress, syncing back to Firebase...');
+                    window.firebaseSyncManager.saveProgress(this.progress);
+                } else if (!isNewDevice && localTimestamp > serverTimestamp) {
+                    console.log('📤 Local is newer (but server has more words), syncing back to Firebase...');
+                    // Even if server has more words, if local is newer, sync it (performSync will do timestamp check)
                     window.firebaseSyncManager.saveProgress(this.progress);
                 } else {
-                    console.log('📭 Not syncing back - server has equal or better progress');
-                    console.log(`   - Server: ${serverCompletedCount} completed, Final: ${finalCompletedCount} completed`);
+                    console.log('📭 Not syncing back - server data is newer or equal, or local has less progress');
                 }
             } else if (serverProgress && serverWordCount === 0) {
                 // Server returned an object but with no wordProgress data
@@ -492,33 +468,22 @@ class VocabTrainer {
                 // No server data and no local progress - this is fine, just continue
                 // BUT: Always retry loading from Firebase on first login, in case there was a timing issue
                 // This is critical for new devices where Firebase might not be ready immediately
-                console.log('🔄 No server data found - retrying Firebase load with multiple attempts (may have timing issue)...');
-                
-                // Try multiple times with increasing delays to ensure Firebase is fully ready
-                let retryServerProgress = null;
-                let retryWordCount = 0;
-                const retryDelays = [2000, 3000, 4000]; // 2s, 3s, 4s delays
-                
-                for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-                    console.log(`🔄 Retry attempt ${attempt + 1}/${retryDelays.length} (waiting ${retryDelays[attempt]}ms)...`);
-                    await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
-                    retryServerProgress = await window.firebaseSyncManager.loadProgress();
-                    retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
-                    if (retryServerProgress && retryWordCount > 0) {
-                        console.log(`✅ Found progress on retry attempt ${attempt + 1} (${retryWordCount} words), loading from Firebase...`);
-                        this.progress = retryServerProgress;
-                        this.progress.localModifiedAt = Date.now();
-                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
-                        console.log('✅ Progress saved to localStorage');
-                        return; // Exit early since we loaded server data
-                    } else {
-                        console.log(`📭 Retry attempt ${attempt + 1} returned ${retryWordCount} words`);
-                    }
+                console.log('🔄 No server data found - retrying Firebase load (may have timing issue)...');
+                // Try one more time with a delay to ensure Firebase is fully ready
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                const retryServerProgress = await window.firebaseSyncManager.loadProgress();
+                const retryWordCount = Object.keys(retryServerProgress?.wordProgress || {}).length;
+                if (retryServerProgress && retryWordCount > 0) {
+                    console.log(`✅ Found progress on retry (${retryWordCount} words), loading from Firebase...`);
+                    this.progress = retryServerProgress;
+                    this.progress.localModifiedAt = Date.now();
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                    console.log('✅ Progress saved to localStorage');
+                    return; // Exit early since we loaded server data
+                } else {
+                    console.log(`📭 Retry also returned ${retryWordCount} words - no server data available`);
+                    console.log('📭 No progress found (server or local) - starting fresh');
                 }
-                
-                // All retries failed
-                console.log(`📭 All ${retryDelays.length} retry attempts returned no data - no server data available`);
-                console.log('📭 No progress found (server or local) - starting fresh');
             } else {
                 // Server returned empty/null progress - don't overwrite with local
                 console.log('📭 Server has no progress data - keeping local data but not uploading');
@@ -534,29 +499,6 @@ class VocabTrainer {
         }
     }
     
-    /**
-     * Calculate the number of completed words in progress data.
-     * A word is considered "completed" if it has at least one of:
-     * - english_arabic_correct = true
-     * - arabic_english_correct = true
-     * - mixed_correct = true
-     * 
-     * This represents actual progress quality (e.g., 19/37 vs 14/37).
-     */
-    calculateCompletedWordCount(progressData) {
-        if (!progressData || !progressData.wordProgress) {
-            return 0;
-        }
-        
-        let completedCount = 0;
-        for (const [wordId, wp] of Object.entries(progressData.wordProgress)) {
-            if (wp.english_arabic_correct || wp.arabic_english_correct || wp.mixed_correct) {
-                completedCount++;
-            }
-        }
-        return completedCount;
-    }
-
     mergeProgress(local, server) {
         // Merge strategy: Local is source of truth during active sessions
         // For boolean flags (correct/mastered), prefer true values (most progress)
@@ -764,12 +706,14 @@ class VocabTrainer {
     }
     
     getWordProgress(id) {
-        // CRITICAL: Only reload if this.progress is completely missing
-        // If this.progress exists but wordProgress is undefined, just initialize it to {}
-        // This prevents hundreds of localStorage reads during rendering
-        if (!this.progress) {
-            this.progress = this.loadProgress();
+        // Use cached progress if available (set by renderLessonsList or other methods)
+        // Only reload if progress is not already loaded - this prevents hundreds of localStorage reads
+        if (!this.progress || !this.progress.wordProgress) {
+            const latestProgress = this.loadProgress();
+            this.progress = latestProgress;
         }
+        
+        // Ensure wordProgress structure exists
         if (!this.progress.wordProgress) {
             this.progress.wordProgress = {};
         }
@@ -988,14 +932,9 @@ class VocabTrainer {
         const lessonData = this.books[book]?.find(l => l.lesson === lesson);
         if (!lessonData) return false;
         
-        // CRITICAL: Only reload if this.progress is completely missing
-        // If this.progress exists but wordProgress is undefined, just initialize it to {}
-        // This prevents hundreds of localStorage reads during rendering
-        if (!this.progress) {
+        // Ensure progress is loaded (but don't reload if already loaded)
+        if (!this.progress || !this.progress.wordProgress) {
             this.progress = this.loadProgress();
-        }
-        if (!this.progress.wordProgress) {
-            this.progress.wordProgress = {};
         }
         
         const totalWords = lessonData.items.length;
@@ -1369,12 +1308,6 @@ class VocabTrainer {
     }
     
     initializeNewSession() {
-        const lessonData = this.currentBook && this.currentLesson
-            ? this.books[this.currentBook].find(l => l.lesson === this.currentLesson)
-            : null;
-        const totalWordsInLesson = lessonData?.items.length || 0;
-        
-        // Start with a clean slate; we will set attempted/correct based on mode-specific completion
         this.sessionStats = {
             attempted: 0,
             correct: 0,
@@ -1399,32 +1332,6 @@ class VocabTrainer {
             this.currentMode
         );
         this.totalQuestions = this.questionPool.length;
-        
-        // CRITICAL: Adjust totalQuestions to account for already completed questions
-        // This ensures "Question X / Total" shows correctly (e.g., "Question 15 / 37" not "Question 1 / 23")
-        // The total should be the original lesson size, not just remaining questions
-        if (this.currentBook && this.currentLesson) {
-            if (lessonData) {
-                // For regular practice, total should be all words in lesson
-                // For mixed mode or final test, it might be 75% of words, so keep the calculated total
-                if (!this.isFinalTest && this.currentMode !== 'mixed') {
-                    this.totalQuestions = lessonData.items.length;
-                }
-            }
-        }
-        
-        // Derive attempted counts purely from mode-specific completion to avoid cross-mode inflation
-        // Completed in mode = total words for the mode minus remaining pool
-        if (!this.reviewMistakesOnly && !this.isFinalTest && lessonData) {
-            const remainingQuestions = this.questionPool.length;
-            const completedInMode = Math.max(0, this.totalQuestions - remainingQuestions);
-            this.sessionStats.attempted = completedInMode;
-            this.sessionStats.correct = completedInMode;
-            this.sessionStats.incorrect = 0; // We can't reliably track past incorrects per mode across devices
-            console.log(`📊 Session seeded from progress: ${completedInMode} completed in ${this.currentMode}, ${remainingQuestions} remaining`);
-        } else {
-            console.log('📊 Session seeded fresh (review/final test or no lesson data)');
-        }
     }
     
     saveSessionState() {
@@ -1880,36 +1787,9 @@ class VocabTrainer {
                 }
             });
         } else {
-            // Regular practice: exclude words that are already completed in the current mode
-            // This ensures that when resuming on a new device, you only see remaining questions
-            // and don't have to redo questions you've already completed
-            const totalWords = lessonData.items.length;
-            pool = lessonData.items.filter(item => {
-                const wp = this.getWordProgress(item.id);
-                if (mode === 'english-arabic') {
-                    // Exclude words that are already correct in English→Arabic mode
-                    return !wp.english_arabic_correct;
-                } else if (mode === 'arabic-english') {
-                    // Exclude words that are already correct in Arabic→English mode
-                    return !wp.arabic_english_correct;
-                } else if (mode === 'mixed') {
-                    // Exclude words that are already correct in Mixed mode
-                    return !wp.mixed_correct;
-                }
-                // If mode is not specified, include all words (shouldn't happen, but be safe)
-                return true;
-            });
-            
-            const completedCount = totalWords - pool.length;
-            if (completedCount > 0) {
-                console.log(`📋 Question pool: ${pool.length} remaining questions (${completedCount} already completed in ${mode} mode)`);
-            }
-            
-            // If all words are already completed, still show them (user might want to review)
-            if (pool.length === 0) {
-                console.log(`📋 All words completed in ${mode} mode - showing all for review`);
-                pool = [...lessonData.items];
-            }
+            // Regular practice: use all words (each word shown once)
+            // Don't filter by mastery - show all words once per session
+            pool = [...lessonData.items];
         }
         
         // If all words are mastered and not final test, still use all words for practice
@@ -2351,11 +2231,8 @@ class VocabTrainer {
     }
     
     updateQuestionStats() {
+        const questionNumber = this.sessionStats.attempted + 1;
         const totalQuestions = this.totalQuestions || 0;
-        const rawQuestionNumber = this.sessionStats.attempted + 1;
-        const questionNumber = totalQuestions > 0
-            ? Math.min(rawQuestionNumber, totalQuestions)
-            : rawQuestionNumber;
         const remaining = this.questionPool.length;
         
         // Show progress: "Question X / Total" or "Question X" if total not set
@@ -2777,23 +2654,6 @@ class VocabTrainer {
                 this.pushHistoryState('dashboard');
             });
         }
-        
-        // Sync on tab hide/refresh/navigation to prevent losing newer progress
-        window.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                this.saveSessionState();
-                if (window.firebaseSyncManager?.syncEnabled) {
-                    window.firebaseSyncManager.forceSync();
-                }
-            }
-        });
-        
-        window.addEventListener('beforeunload', () => {
-            this.saveSessionState();
-            if (window.firebaseSyncManager?.syncEnabled) {
-                window.firebaseSyncManager.forceSync();
-            }
-        });
     }
     
     // Authentication handlers
@@ -2935,4 +2795,3 @@ if (document.readyState === 'loading') {
 } else {
     new VocabTrainer();
 }
-
