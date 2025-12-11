@@ -170,6 +170,18 @@ class VocabTrainer {
                 this.handleAuthStateChange(user);
             };
             
+            // Listen for progress updates from server (when server data is newer)
+            window.addEventListener('progressUpdatedFromServer', (event) => {
+                console.log('📥 Progress updated from server, reloading...');
+                this.progress = this.loadProgress();
+                // Refresh current view if visible
+                if (document.getElementById('dashboard-view').classList.contains('active')) {
+                    this.showDashboard();
+                } else if (document.getElementById('lesson-view').classList.contains('active')) {
+                    this.showLessonView(this.currentBook, this.currentLesson);
+                }
+            });
+            
             // Initialize Firebase Auth (this will check redirect result and trigger callbacks)
             console.log('🔄 Calling firebaseAuthManager.init()...');
             console.log('📋 firebaseAuthManager exists?', !!window.firebaseAuthManager);
@@ -367,6 +379,25 @@ class VocabTrainer {
         if (userMenu) userMenu.style.display = 'none';
     }
     
+    // Calculate progress score: simple count of completed words per test
+    // Score = sum of words completed in each test mode (English-Arabic + Arabic-English + Mixed)
+    // Example: 16/37 in Arabic-English = 16 points for that mode
+    calculateProgressScore(progress) {
+        if (!progress || !progress.wordProgress) return 0;
+        
+        let score = 0;
+        const wordProgress = progress.wordProgress || {};
+        
+        // Count words completed in each test mode
+        Object.values(wordProgress).forEach(wp => {
+            if (wp.english_arabic_correct) score += 1; // English-Arabic test
+            if (wp.arabic_english_correct) score += 1; // Arabic-English test
+            if (wp.mixed_correct) score += 1; // Mixed test
+        });
+        
+        return score;
+    }
+
     async syncProgressFromServer(refreshFromFirebase = false) {
         try {
             if (!window.firebaseSyncManager || !window.firebaseSyncManager.syncEnabled) {
@@ -401,28 +432,37 @@ class VocabTrainer {
 
             let serverProgress = await window.firebaseSyncManager.loadProgress();
             let serverWordCount = Object.keys(serverProgress?.wordProgress || {}).length;
-            let serverTimestamp = serverProgress?.localModifiedAt || 0;
-            const localTimestamp = localProgress?.localModifiedAt || 0;
             
             console.log('📥 Server returned:', serverProgress ? `${serverWordCount} words` : 'null');
-            if (serverTimestamp) {
-                console.log(`   - Server timestamp: ${new Date(serverTimestamp).toLocaleTimeString()}`);
-            }
-            if (localTimestamp) {
-                console.log(`   - Local timestamp: ${new Date(localTimestamp).toLocaleTimeString()}`);
-            }
 
-            // CRITICAL: If server has data, ALWAYS respect it (it's the source of truth)
-            // Also handle case where serverProgress exists but wordProgress is empty (shouldn't happen, but be safe)
+            // CRITICAL: Compare progress SCORES, not timestamps
+            // If server has data, compare scores to determine which is better
             if (serverProgress && serverWordCount > 0) {
+                const serverScore = this.calculateProgressScore(serverProgress);
+                const localScore = this.calculateProgressScore(localProgress);
+                
+                console.log(`   - Server progress score: ${serverScore.toFixed(2)}`);
+                console.log(`   - Local progress score: ${localScore.toFixed(2)}`);
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:415',message:'comparing progress scores in syncProgressFromServer',data:{serverScore,localScore,serverHasHigherScore:serverScore>localScore,isNewDevice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score3'})}).catch(()=>{});
+                // #endregion
+                
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
                     console.log('📥 New device - using Firebase data directly (no merge)');
                     this.progress = serverProgress;
+                } else if (serverScore > localScore) {
+                    // Server has higher score - use server data
+                    console.log('📥 Server has HIGHER SCORE - using server data');
+                    this.progress = serverProgress;
+                } else if (localScore > serverScore) {
+                    // Local has higher score - merge but keep local's better progress
+                    console.log('📥 Local has HIGHER SCORE - merging but preserving local progress');
+                    this.progress = this.mergeProgress(localProgress, serverProgress);
                 } else {
-                    // EXISTING DEVICE: Merge Firebase + Local, but server data takes precedence
-                    console.log('📥 Existing device - merging Firebase with local (server data respected)');
-                    // Merge but ensure server data is preserved (mergeProgress already does this by taking max/true values)
+                    // Scores are equal - merge both
+                    console.log('📥 Scores are EQUAL - merging both');
                     this.progress = this.mergeProgress(localProgress, serverProgress);
                 }
                 
@@ -431,7 +471,28 @@ class VocabTrainer {
                 localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
                 
                 const finalWordCount = Object.keys(this.progress.wordProgress || {}).length;
-                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words');
+                const finalScore = this.calculateProgressScore(this.progress);
+                console.log('✅ Progress saved to localStorage:', finalWordCount, 'words, score:', finalScore.toFixed(2));
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:474',message:'final score after merge/load',data:{finalScore,serverScore,localScore,willSync:!isNewDevice && finalScore > serverScore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score3'})}).catch(()=>{});
+                // #endregion
+                
+                // CRITICAL SAFEGUARD: Verify merged score is >= max(local, server)
+                // This ensures merge never loses progress
+                const maxExpectedScore = Math.max(localScore, serverScore);
+                if (finalScore < maxExpectedScore) {
+                    console.error('❌ CRITICAL: Merged score is LOWER than expected! This should never happen!');
+                    console.error(`   - Local score: ${localScore}, Server score: ${serverScore}`);
+                    console.error(`   - Expected merged score >= ${maxExpectedScore}, but got ${finalScore}`);
+                    // Use the one with higher score to prevent data loss
+                    if (serverScore > localScore) {
+                        console.error('   - Using server data to prevent data loss');
+                        this.progress = serverProgress;
+                        this.progress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(this.progress));
+                    }
+                }
                 
                 // Log sample of saved data for verification
                 const sampleIds = Object.keys(this.progress.wordProgress || {}).slice(0, 3);
@@ -440,17 +501,13 @@ class VocabTrainer {
                     console.log(`   - ${id}: E→A=${wp.english_arabic_correct}, A→E=${wp.arabic_english_correct}`);
                 });
                 
-                // CRITICAL: Only sync back if local is NEWER than server AND has more progress
-                // This prevents old local data from overwriting newer server data
-                if (!isNewDevice && localTimestamp > serverTimestamp && finalWordCount > serverWordCount) {
-                    console.log('📤 Local is newer and has more progress, syncing back to Firebase...');
-                    window.firebaseSyncManager.saveProgress(this.progress);
-                } else if (!isNewDevice && localTimestamp > serverTimestamp) {
-                    console.log('📤 Local is newer (but server has more words), syncing back to Firebase...');
-                    // Even if server has more words, if local is newer, sync it (performSync will do timestamp check)
+                // CRITICAL: Only sync back if final score is HIGHER than server score
+                // This prevents lower-scored data from overwriting higher-scored server data
+                if (!isNewDevice && finalScore > serverScore) {
+                    console.log('📤 Final score is HIGHER than server - syncing back to Firebase...');
                     window.firebaseSyncManager.saveProgress(this.progress);
                 } else {
-                    console.log('📭 Not syncing back - server data is newer or equal, or local has less progress');
+                    console.log('📭 Not syncing back - server has higher or equal score');
                 }
             } else if (serverProgress && serverWordCount === 0) {
                 // Server returned an object but with no wordProgress data
@@ -1073,6 +1130,10 @@ class VocabTrainer {
     }
     
     async showDashboard() {
+        // Sync before showing dashboard: check server first, then sync local if needed
+        if (window.firebaseSyncManager?.syncEnabled) {
+            await this.syncProgressFromServer();
+        }
         // Reload progress from localStorage (synced data is already there)
         // CRITICAL: Always reload from localStorage to get latest synced data
         this.progress = this.loadProgress();
@@ -1110,6 +1171,10 @@ class VocabTrainer {
     }
     
     async showLessonView(book, lesson) {
+        // Sync before showing lesson view: check server first, then sync local if needed
+        if (window.firebaseSyncManager?.syncEnabled) {
+            await this.syncProgressFromServer();
+        }
         console.log(`📖 Showing lesson view: Book ${book}, Lesson ${lesson}`);
         this.currentBook = book;
         this.currentLesson = lesson;
@@ -2190,14 +2255,18 @@ class VocabTrainer {
         // Save session state after each answer (for resume functionality)
         this.saveSessionState();
         
-        // Force sync to Firebase after each question answer
+        // Sync after each question: first check server, then sync local if needed
         if (window.firebaseSyncManager?.syncEnabled) {
             console.log('📤 Syncing progress after question...');
-            window.firebaseSyncManager.forceSync().then(result => {
+            // First, check if server has newer data and sync it to local
+            this.syncProgressFromServer().then(() => {
+                // Then sync local to server (if local is newer)
+                return window.firebaseSyncManager.forceSync();
+            }).then(result => {
                 if (result) {
                     console.log('✅ Progress synced to Firebase after question');
                 } else {
-                    console.log('⚠️ Sync returned false - may need manual sync');
+                    console.log('⚠️ Sync returned false - server may be newer or sync skipped');
                 }
             }).catch(err => {
                 console.warn('❌ Background sync after question failed:', err.message);
@@ -2444,8 +2513,9 @@ class VocabTrainer {
         
         // Back buttons
         document.getElementById('back-to-dashboard').addEventListener('click', async () => {
-            // Force sync to Firebase before leaving
+            // Sync before leaving: check server first, then sync local if needed
             if (window.firebaseSyncManager?.syncEnabled) {
+                await this.syncProgressFromServer();
                 await window.firebaseSyncManager.forceSync();
             }
             await this.showDashboard();
@@ -2455,8 +2525,9 @@ class VocabTrainer {
         document.getElementById('back-to-lesson').addEventListener('click', async () => {
             // Save session state before leaving (so we can resume)
             this.saveSessionState();
-            // Force sync to Firebase before leaving
+            // Sync before leaving: check server first, then sync local if needed
             if (window.firebaseSyncManager?.syncEnabled) {
+                await this.syncProgressFromServer();
                 await window.firebaseSyncManager.forceSync();
             }
             // Reload progress to ensure we have latest data
@@ -2469,8 +2540,9 @@ class VocabTrainer {
         document.getElementById('back-to-lesson-summary').addEventListener('click', async () => {
             // Save session state before leaving
             this.saveSessionState();
-            // Force sync to Firebase before leaving
+            // Sync before leaving: check server first, then sync local if needed
             if (window.firebaseSyncManager?.syncEnabled) {
+                await this.syncProgressFromServer();
                 await window.firebaseSyncManager.forceSync();
             }
             // Reload progress to ensure we have latest data
@@ -2482,8 +2554,9 @@ class VocabTrainer {
         document.getElementById('back-to-lesson-btn').addEventListener('click', async () => {
             // Save session state before leaving
             this.saveSessionState();
-            // Force sync to Firebase before leaving
+            // Sync before leaving: check server first, then sync local if needed
             if (window.firebaseSyncManager?.syncEnabled) {
+                await this.syncProgressFromServer();
                 await window.firebaseSyncManager.forceSync();
             }
             // Reload progress to ensure we have latest data

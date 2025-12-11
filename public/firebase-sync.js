@@ -12,6 +12,25 @@ class FirebaseSync {
         this.lastSyncTime = 0;
         this.minSyncInterval = 500; // Reduced to 500ms for faster sync
     }
+    
+    // Calculate progress score: simple count of completed words per test
+    // Score = sum of words completed in each test mode (English-Arabic + Arabic-English + Mixed)
+    // Example: 16/37 in Arabic-English = 16 points for that mode
+    calculateProgressScore(progress) {
+        if (!progress || !progress.wordProgress) return 0;
+        
+        let score = 0;
+        const wordProgress = progress.wordProgress || {};
+        
+        // Count words completed in each test mode
+        Object.values(wordProgress).forEach(wp => {
+            if (wp.english_arabic_correct) score += 1; // English-Arabic test
+            if (wp.arabic_english_correct) score += 1; // Arabic-English test
+            if (wp.mixed_correct) score += 1; // Mixed test
+        });
+        
+        return score;
+    }
 
     async init() {
         // Wait for Firebase to be initialized
@@ -234,14 +253,40 @@ class FirebaseSync {
             }
             console.log(`   - Local modified at: ${localModifiedAt} (${new Date(localModifiedAt).toLocaleTimeString()})`);
             
-            // CRITICAL SAFEGUARD: Never overwrite server data if it's newer than local
-            if (serverHasData && serverLocalTimestamp > localModifiedAt) {
-                console.warn('⚠️ SKIPPING SYNC - Server data is NEWER than local data!');
-                console.warn(`   - Server timestamp: ${new Date(serverLocalTimestamp).toLocaleTimeString()}`);
-                console.warn(`   - Local timestamp: ${new Date(localModifiedAt).toLocaleTimeString()}`);
-                console.warn('   - This prevents older local data from overwriting newer server data');
-                this.syncing = false;
-                return false;
+            // CRITICAL SAFEGUARD: Compare progress SCORES, not timestamps
+            // Never overwrite server data if it has a higher score than local
+            // Instead, sync server data TO local store
+            if (serverHasData && existingData.progress) {
+                const serverScore = this.calculateProgressScore(existingData.progress);
+                const localScore = this.calculateProgressScore(progressToSync);
+                
+                console.log(`   - Server progress score: ${serverScore.toFixed(2)}`);
+                console.log(`   - Local progress score: ${localScore.toFixed(2)}`);
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'firebase-sync.js:260',message:'comparing progress scores',data:{serverScore,localScore,serverHasHigherScore:serverScore>localScore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score1'})}).catch(()=>{});
+                // #endregion
+                
+                if (serverScore > localScore) {
+                    console.warn('⚠️ Server data has HIGHER SCORE than local data - syncing server data to local store');
+                    console.warn(`   - Server score: ${serverScore.toFixed(2)}`);
+                    console.warn(`   - Local score: ${localScore.toFixed(2)}`);
+                    console.warn('   - Loading server data to local storage...');
+                    
+                    // Load server data to local storage
+                    const serverProgress = existingData.progress;
+                    serverProgress.localModifiedAt = serverLocalTimestamp;
+                    localStorage.setItem('madinah_vocab_progress', JSON.stringify(serverProgress));
+                    console.log('✅ Server data synced to local storage');
+                    
+                    // Trigger a custom event to notify the app that progress was updated from server
+                    window.dispatchEvent(new CustomEvent('progressUpdatedFromServer', { 
+                        detail: { progress: serverProgress } 
+                    }));
+                    
+                    this.syncing = false;
+                    return false; // Don't upload local data, but we've synced server to local
+                }
             }
             
             // Additional safeguard: If server has substantial data but local has very little, be cautious
