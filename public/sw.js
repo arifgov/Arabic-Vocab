@@ -1,6 +1,6 @@
 // Service Worker for Madinah Arabic Vocab Trainer
 // IMPORTANT: Update APP_VERSION when releasing a new version to force cache refresh
-const APP_VERSION = '1.0.0'; // Update this with each release (e.g., '1.0.1', '1.1.0', etc.)
+const APP_VERSION = '1.0.1'; // Update this with each release (e.g., '1.0.1', '1.1.0', etc.)
 const CACHE_NAME = `arabic-vocab-${APP_VERSION}`;
 const STATIC_CACHE = `arabic-vocab-static-${APP_VERSION}`;
 const DATA_CACHE = `arabic-vocab-data-${APP_VERSION}`;
