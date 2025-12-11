@@ -9,8 +9,8 @@
     <meta name="theme-color" content="#6366f1">
     <title>Madinah Arabic Vocab Trainer</title>
     <!-- Cache busting: Update version query param when releasing new version -->
-    <link rel="stylesheet" href="styles.css?v=1.0.0">
-    <link rel="manifest" href="manifest.json?v=1.0.0">
+    <link rel="stylesheet" href="styles.css?v=1.0.1">
+    <link rel="manifest" href="manifest.json?v=1.0.1">
     
     <!-- Firebase SDKs -->
     <script type="module">
@@ -316,16 +316,16 @@
     </div>
     
     <!-- Cache busting: Update version query param when releasing new version -->
-    <script src="firebase-auth.js?v=1.0.0"></script>
-    <script src="firebase-sync.js?v=1.0.0"></script>
-    <script src="main.js?v=1.0.0"></script>
-    <script src="admin.js?v=1.0.0"></script>
+    <script src="firebase-auth.js?v=1.0.1"></script>
+    <script src="firebase-sync.js?v=1.0.1"></script>
+    <script src="main.js?v=1.0.1"></script>
+    <script src="admin.js?v=1.0.1"></script>
     <script>
         // Register service worker with cache busting
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 // Add version query param to force update
-                navigator.serviceWorker.register('/sw.js?v=1.0.0')
+                navigator.serviceWorker.register('/sw.js?v=1.0.1')
                     .then((registration) => {
                         console.log('Service Worker registered:', registration.scope);
                         

@@ -1257,6 +1257,9 @@ class VocabTrainer {
                 // Resume if there are remaining questions (even if mistakes were made, we can continue)
                 if (session.questionPoolIds && session.questionPoolIds.length > 0) {
                     console.log('📂 Resuming previous session...');
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1258',message:'resuming session - before restore',data:{sessionAttempted:session.attempted,sessionCorrect:session.correct,sessionIncorrect:session.incorrect,questionPoolIdsLength:session.questionPoolIds?.length,totalQuestions:session.totalQuestions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp3'})}).catch(()=>{});
+                    // #endregion
                     this.sessionStats = {
                         attempted: session.attempted || 0,
                         correct: session.correct || 0,
@@ -1280,6 +1283,9 @@ class VocabTrainer {
                     }
                     
                     this.totalQuestions = session.totalQuestions || this.questionPool.length;
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1282',message:'resuming session - after restore',data:{sessionStatsAttempted:this.sessionStats.attempted,sessionStatsCorrect:this.sessionStats.correct,questionPoolLength:this.questionPool.length,totalQuestions:this.totalQuestions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp3'})}).catch(()=>{});
+                    // #endregion
                     console.log(`✅ Resumed: ${this.sessionStats.attempted} attempted, ${this.questionPool.length} questions remaining`);
                     // Keep the session key - we'll update it as we progress
                 } else {
@@ -1705,6 +1711,9 @@ class VocabTrainer {
             }
         });
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1708',message:'calculateModeProgress result',data:{mode,completed,totalItems:items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp4'})}).catch(()=>{});
+        // #endregion
         return completed;
     }
     
@@ -2231,9 +2240,45 @@ class VocabTrainer {
     }
     
     updateQuestionStats() {
-        const questionNumber = this.sessionStats.attempted + 1;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:2242',message:'updateQuestionStats entry',data:{currentMode:this.currentMode,currentBook:this.currentBook,currentLesson:this.currentLesson,reviewMistakesOnly:this.reviewMistakesOnly,isFinalTest:this.isFinalTest,sessionAttempted:this.sessionStats.attempted},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'hyp1,hyp2'})}).catch(()=>{});
+        // #endregion
+        // CRITICAL FIX: Calculate question number based on overall progress, not just session progress
+        const lessonData = this.books[this.currentBook]?.find(l => l.lesson === this.currentLesson);
+        let alreadyCompleted = 0;
+        let questionNumber;
+        
+        if (this.reviewMistakesOnly || this.isFinalTest) {
+            // For Review Mistakes and Final Test: question number = current position in session
+            // This is because these modes don't track overall progress the same way
+            questionNumber = this.sessionStats.attempted + 1;
+        } else {
+            // For regular practice: calculate based on overall progress
+            if (lessonData) {
+                lessonData.items.forEach(item => {
+                    const wp = this.getWordProgress(item.id);
+                    if (this.currentMode === 'english-arabic' && wp.english_arabic_correct) {
+                        alreadyCompleted++;
+                    } else if (this.currentMode === 'arabic-english' && wp.arabic_english_correct) {
+                        alreadyCompleted++;
+                    } else if (this.currentMode === 'mixed' && wp.mixed_correct) {
+                        alreadyCompleted++;
+                    }
+                });
+            }
+            // Question number = already completed + 1 (the next question to answer)
+            // NOTE: sessionStats.attempted is for session stats only, not for question numbering
+            // If you've completed 15 words, the next question is #16, regardless of how many
+            // questions were attempted in this session
+            questionNumber = alreadyCompleted + 1;
+        }
+        
         const totalQuestions = this.totalQuestions || 0;
         const remaining = this.questionPool.length;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:2275',message:'final questionNumber calculation',data:{reviewMistakesOnly:this.reviewMistakesOnly,isFinalTest:this.isFinalTest,alreadyCompleted,sessionAttempted:this.sessionStats.attempted,questionNumber,totalQuestions,remaining},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'hyp1,hyp2'})}).catch(()=>{});
+        // #endregion
+        console.log('🔍 DEBUG updateQuestionStats:', {reviewMistakesOnly: this.reviewMistakesOnly, alreadyCompleted, sessionAttempted: this.sessionStats.attempted, questionNumber, totalQuestions});
         
         // Show progress: "Question X / Total" or "Question X" if total not set
         if (totalQuestions > 0) {
