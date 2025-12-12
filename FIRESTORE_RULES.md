@@ -58,3 +58,4 @@ After updating the rules:
 - To add more admins in the future, you can modify the `isAdmin()` function to check multiple emails or use a custom claim.
 
 
+

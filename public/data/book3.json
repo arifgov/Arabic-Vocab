@@ -1,0 +1,600 @@
+[
+  {
+    "book": 3,
+    "lesson": 1,
+    "lesson_label": "Lesson 1",
+    "items": [
+      {
+        "id": "b3_l1_001",
+        "english": "at that time",
+        "arabic": "جِينَبْن",
+        "transliteration": "jynabn"
+      },
+      {
+        "id": "b3_l1_002",
+        "english": "another name of Madinah",
+        "arabic": "طَيَّبَةُ",
+        "transliteration": "tayyabatu"
+      }
+    ]
+  },
+  {
+    "book": 3,
+    "lesson": 2,
+    "lesson_label": "Lesson 2",
+    "items": [
+      {
+        "id": "b3_l2_001",
+        "english": "a hadîth reported by both Imam Bukhari and Imam Muslim in their hadîth collections known as",
+        "arabic": "خَدِيثٌ مُتَّفَقٌ عَلَيْهِ",
+        "transliteration": "hadithun muttafaqun alayhi"
+      },
+      {
+        "id": "b3_l2_002",
+        "english": "oath",
+        "arabic": "قَسَمٌ",
+        "transliteration": "qasamun"
+      },
+      {
+        "id": "b3_l2_003",
+        "english": "a hâjj (pilgrim) who has assumed the state of sanctity",
+        "arabic": "عُثْرٌ",
+        "transliteration": "uthrun"
+      },
+      {
+        "id": "b3_l2_004",
+        "english": "visit to the Ka'bah",
+        "arabic": "عُثْرَةٌ",
+        "transliteration": "uthratun"
+      },
+      {
+        "id": "b3_l2_005",
+        "english": "group, party",
+        "arabic": "حِرْبٌ",
+        "transliteration": "harbun"
+      },
+      {
+        "id": "b3_l2_006",
+        "english": "happy, rejoicing",
+        "arabic": "فَرِحٌ",
+        "transliteration": "farihun"
+      },
+      {
+        "id": "b3_l2_007",
+        "english": "name of the 5th sûrah (literally, dining table)",
+        "arabic": "الْمَائِدَةُ",
+        "transliteration": "almaidatu"
+      },
+      {
+        "id": "b3_l2_008",
+        "english": "name of the 30th sûrah (literally, the Byzantines)",
+        "arabic": "الرُّومُ",
+        "transliteration": "arroumu"
+      },
+      {
+        "id": "b3_l2_009",
+        "english": "news bulletin",
+        "arabic": "نَشْرَةُ الأَحْبَارِ",
+        "transliteration": "nashratu alahbari"
+      },
+      {
+        "id": "b3_l2_010",
+        "english": "farewell",
+        "arabic": "وَدَاعٌ",
+        "transliteration": "wadaaun"
+      },
+      {
+        "id": "b3_l2_011",
+        "english": "to rise (of the sun)",
+        "arabic": "طَلَعَ يَطْلُعُ طُلُوعاً",
+        "transliteration": "talaa yatluu tuluuan"
+      },
+      {
+        "id": "b3_l2_012",
+        "english": "to set (of the sun)",
+        "arabic": "غَرَبَ يَغُرِبُ غُرُوباً",
+        "transliteration": "gharaba yaghribu ghuruuban"
+      },
+      {
+        "id": "b3_l2_013",
+        "english": "to speak, utter (a word), talk, pronounce",
+        "arabic": "نَطَقَ يَنْطِقُ نُطْفَاً",
+        "transliteration": "nataqa yantiqun nutfan"
+      },
+      {
+        "id": "b3_l2_014",
+        "english": "to accept",
+        "arabic": "ثَقَبَّنَ يَتَقَبَّلُ",
+        "transliteration": "thaqabbana yataqabbalu"
+      },
+      {
+        "id": "b3_l2_015",
+        "english": "to say iqâmah",
+        "arabic": "أَفَامَ يُقِيمُ",
+        "transliteration": "aqaama yuqeemu"
+      },
+      {
+        "id": "b3_l2_016",
+        "english": "to carry",
+        "arabic": "حَمَلَ يَحْمِلُ",
+        "transliteration": "hamala yahmilu"
+      },
+      {
+        "id": "b3_l2_017",
+        "english": "to wish, to want",
+        "arabic": "شَاءَ يَشَاءُ",
+        "transliteration": "shaa yashaa"
+      },
+      {
+        "id": "b3_l2_018",
+        "english": "to explain",
+        "arabic": "شَرَحَ يَشْرَحُ",
+        "transliteration": "sharaha yashrahu"
+      },
+      {
+        "id": "b3_l2_019",
+        "english": "meaning",
+        "arabic": "مُعْنَى",
+        "transliteration": "maanaa"
+      },
+      {
+        "id": "b3_l2_020",
+        "english": "state, situation, circumstance",
+        "arabic": "حَالٌ",
+        "transliteration": "haalun"
+      },
+      {
+        "id": "b3_l2_021",
+        "english": "to deliver a lecture, to address a gathering",
+        "arabic": "حَطَبَ يَخْطُبُ",
+        "transliteration": "khataba yakhtubu"
+      },
+      {
+        "id": "b3_l2_022",
+        "english": "to seek",
+        "arabic": "طَلَبَ يَطْلُبُ",
+        "transliteration": "talaba yatlubu"
+      },
+      {
+        "id": "b3_l2_023",
+        "english": "to remain",
+        "arabic": "بَقِيَ يَنْقَى",
+        "transliteration": "baqiya yanqaa"
+      },
+      {
+        "id": "b3_l2_024",
+        "english": "to approach, go near",
+        "arabic": "قَرِبَ يَقْرَبُ",
+        "transliteration": "qariba yaqrabu"
+      },
+      {
+        "id": "b3_l2_025",
+        "english": "to inform, to convey the meaning, to denote, to signify",
+        "arabic": "أَفَادَ يُفِيدُ",
+        "transliteration": "afaada yufeedu"
+      },
+      {
+        "id": "b3_l2_026",
+        "english": "to respond, to answer (a prayer), to grant (a request)",
+        "arabic": "اسْتَجَابَ يَسْتَجِيبُ",
+        "transliteration": "istajaaba yastajeebu"
+      },
+      {
+        "id": "b3_l2_027",
+        "english": "answer!",
+        "arabic": "اسْتَجِبْ",
+        "transliteration": "istajib"
+      },
+      {
+        "id": "b3_l2_028",
+        "english": "to overturn, to change",
+        "arabic": "قَلَبَ يَقْلِبُ",
+        "transliteration": "qalaba yaqlibu"
+      },
+      {
+        "id": "b3_l2_029",
+        "english": "composition, writing",
+        "arabic": "إِنْشَاءٌ",
+        "transliteration": "inshaaun"
+      },
+      {
+        "id": "b3_l2_030",
+        "english": "healthy",
+        "arabic": "صَحِيحٌ",
+        "transliteration": "sahiihun"
+      },
+      {
+        "id": "b3_l2_031",
+        "english": "newspaper",
+        "arabic": "صَحِيفَةٌ",
+        "transliteration": "sahiifatun"
+      },
+      {
+        "id": "b3_l2_032",
+        "english": "condition",
+        "arabic": "شَرْطٌ",
+        "transliteration": "shartun"
+      },
+      {
+        "id": "b3_l2_033",
+        "english": "after the pattern of, similar to, in the manner of",
+        "arabic": "عَلَى غِرَارٍ كَذَا",
+        "transliteration": "alaa ghiraarin kadhaa"
+      },
+      {
+        "id": "b3_l2_034",
+        "english": "line",
+        "arabic": "خَطٌّ",
+        "transliteration": "khattun"
+      },
+      {
+        "id": "b3_l2_035",
+        "english": "to make sure",
+        "arabic": "تَأَكَّدَ يَتَأَكَّدُ",
+        "transliteration": "taakkada yataakkadu"
+      },
+      {
+        "id": "b3_l2_036",
+        "english": "game (hunted wild animal)",
+        "arabic": "صَيْدٌ",
+        "transliteration": "saydun"
+      },
+      {
+        "id": "b3_l2_037",
+        "english": "to be, being",
+        "arabic": "كَوْن",
+        "transliteration": "kawn"
+      },
+      {
+        "id": "b3_l2_038",
+        "english": "last night",
+        "arabic": "الْبَارِحَةَ",
+        "transliteration": "albaarihata"
+      }
+    ]
+  },
+  {
+    "book": 3,
+    "lesson": 3,
+    "lesson_label": "Lesson 3",
+    "items": [
+      {
+        "id": "b3_l3_001",
+        "english": "rule",
+        "arabic": "قَاعِدَةٌ",
+        "transliteration": "qaaidatun"
+      },
+      {
+        "id": "b3_l3_002",
+        "english": "clothes",
+        "arabic": "مَالآيِسُ",
+        "transliteration": "maalayisu"
+      },
+      {
+        "id": "b3_l3_003",
+        "english": "shoe",
+        "arabic": "حِذَاءٌ",
+        "transliteration": "hidaaun"
+      },
+      {
+        "id": "b3_l3_004",
+        "english": "most of the books",
+        "arabic": "مُعْظَمُ الكُتُبِ",
+        "transliteration": "muazhamu alkutubi"
+      },
+      {
+        "id": "b3_l3_005",
+        "english": "grains",
+        "arabic": "حَبٌّ",
+        "transliteration": "habbun"
+      },
+      {
+        "id": "b3_l3_006",
+        "english": "thief",
+        "arabic": "لِص",
+        "transliteration": "lis"
+      },
+      {
+        "id": "b3_l3_007",
+        "english": "ticket",
+        "arabic": "سِوَارٌ",
+        "transliteration": "siwaarun"
+      }
+    ]
+  },
+  {
+    "book": 3,
+    "lesson": 34,
+    "lesson_label": "Lesson 34",
+    "items": [
+      {
+        "id": "b3_l34_001",
+        "english": "learned man, scholar",
+        "arabic": "عَامٍّ",
+        "transliteration": "aamil"
+      },
+      {
+        "id": "b3_l34_002",
+        "english": "Islamic Law",
+        "arabic": "شَرِيعَةٌ",
+        "transliteration": "shariaatun"
+      },
+      {
+        "id": "b3_l34_003",
+        "english": "issue, matter, problem",
+        "arabic": "مَسْأَلَةٌ",
+        "transliteration": "masalatun"
+      },
+      {
+        "id": "b3_l34_004",
+        "english": "to set aside, particularize (gr) to reduce the indefiniteness",
+        "arabic": "خَصَّصَ",
+        "transliteration": "khassasa"
+      },
+      {
+        "id": "b3_l34_005",
+        "english": "to be independent",
+        "arabic": "اِسْتَقَارٌ",
+        "transliteration": "istaqaarun"
+      },
+      {
+        "id": "b3_l34_006",
+        "english": "independent, separate",
+        "arabic": "مُسْتَقِارٌّ",
+        "transliteration": "mustaqarrun"
+      },
+      {
+        "id": "b3_l34_007",
+        "english": "to act justly",
+        "arabic": "عَدَلَ",
+        "transliteration": "adala"
+      },
+      {
+        "id": "b3_l34_008",
+        "english": "to act justly, deal fairly",
+        "arabic": "أَفْسَطَ",
+        "transliteration": "afsata"
+      },
+      {
+        "id": "b3_l34_009",
+        "english": "to be one's liking",
+        "arabic": "طَابَ",
+        "transliteration": "taaba"
+      },
+      {
+        "id": "b3_l34_010",
+        "english": "rainbow",
+        "arabic": "فَوْسُ فُرْحَ",
+        "transliteration": "fawsu furha"
+      },
+      {
+        "id": "b3_l34_011",
+        "english": "spectrum",
+        "arabic": "طَيِّفٌ",
+        "transliteration": "tayyifun"
+      },
+      {
+        "id": "b3_l34_012",
+        "english": "to follow in succession",
+        "arabic": "تَتَابَعَ",
+        "transliteration": "tataba"
+      },
+      {
+        "id": "b3_l34_013",
+        "english": "to confide, to speak secretly",
+        "arabic": "أَسَرَّ",
+        "transliteration": "asarra"
+      },
+      {
+        "id": "b3_l34_014",
+        "english": "laboratory, workshop",
+        "arabic": "مَعْمَلٌ",
+        "transliteration": "maamalun"
+      },
+      {
+        "id": "b3_l34_015",
+        "english": "to become attached",
+        "arabic": "خُفْ",
+        "transliteration": "khuf"
+      },
+      {
+        "id": "b3_l34_016",
+        "english": "reason",
+        "arabic": "عِلَّةٌ",
+        "transliteration": "illatun"
+      },
+      {
+        "id": "b3_l34_017",
+        "english": "to close, finish, end, seal",
+        "arabic": "خَتَمَ",
+        "transliteration": "khatama"
+      },
+      {
+        "id": "b3_l34_018",
+        "english": "pregnant",
+        "arabic": "حُبْلَى",
+        "transliteration": "hublaa"
+      },
+      {
+        "id": "b3_l34_019",
+        "english": "religious ruling",
+        "arabic": "فَتْوَى",
+        "transliteration": "fatwaa"
+      },
+      {
+        "id": "b3_l34_020",
+        "english": "present, gift",
+        "arabic": "هَدِيَةٌ",
+        "transliteration": "hadiyatun"
+      },
+      {
+        "id": "b3_l34_021",
+        "english": "desert",
+        "arabic": "صَحْرَاءُ",
+        "transliteration": "sahraau"
+      },
+      {
+        "id": "b3_l34_022",
+        "english": "similar, like",
+        "arabic": "شِيْهُ",
+        "transliteration": "shiihu"
+      },
+      {
+        "id": "b3_l34_023",
+        "english": "message",
+        "arabic": "رِسَالَةٌ",
+        "transliteration": "risaalatun"
+      },
+      {
+        "id": "b3_l34_024",
+        "english": "coffee cup",
+        "arabic": "فِنْجَانُ",
+        "transliteration": "finjaanun"
+      },
+      {
+        "id": "b3_l34_025",
+        "english": "week",
+        "arabic": "أُسْبُوعٌ",
+        "transliteration": "usbuuun"
+      },
+      {
+        "id": "b3_l34_026",
+        "english": "serpent",
+        "arabic": "نُعْبَانٌ",
+        "transliteration": "nuubaanun"
+      },
+      {
+        "id": "b3_l34_027",
+        "english": "tomato",
+        "arabic": "طَماطِعُ",
+        "transliteration": "tamaatiu"
+      },
+      {
+        "id": "b3_l34_028",
+        "english": "potato",
+        "arabic": "بَطَاطِسُ",
+        "transliteration": "bataatisun"
+      },
+      {
+        "id": "b3_l34_029",
+        "english": "chalk (to write)",
+        "arabic": "طَبَاشِيرُ",
+        "transliteration": "tabaashiiru"
+      },
+      {
+        "id": "b3_l34_030",
+        "english": "trousers",
+        "arabic": "سَرَاوِيلُ",
+        "transliteration": "saraawiilu"
+      },
+      {
+        "id": "b3_l34_031",
+        "english": "(gr) proper name",
+        "arabic": "عَلَمٌ",
+        "transliteration": "alamun"
+      },
+      {
+        "id": "b3_l34_032",
+        "english": "(gr) adjective",
+        "arabic": "صِفَةٌ",
+        "transliteration": "sifatun"
+      },
+      {
+        "id": "b3_l34_033",
+        "english": "named, called, known",
+        "arabic": "مُسَمَّى",
+        "transliteration": "musammaa"
+      },
+      {
+        "id": "b3_l34_034",
+        "english": "middle",
+        "arabic": "وَسَطٌ",
+        "transliteration": "wasatun"
+      },
+      {
+        "id": "b3_l34_035",
+        "english": "(gr) a three-letter word with middle letter being vowelless",
+        "arabic": "ثُلاَثِيِّ سَاكِنُ الوَسَطِ",
+        "transliteration": "thulaathiyy saakinu alwasati"
+      },
+      {
+        "id": "b3_l34_036",
+        "english": "(gr) transformed",
+        "arabic": "مَعْنُولُ",
+        "transliteration": "manuulun"
+      },
+      {
+        "id": "b3_l34_037",
+        "english": "compound",
+        "arabic": "مُرَكَّباً",
+        "transliteration": "murakkaban"
+      },
+      {
+        "id": "b3_l34_038",
+        "english": "to stipulate, to make conditional",
+        "arabic": "اِشْتَرَطْ",
+        "transliteration": "ishtarata"
+      },
+      {
+        "id": "b3_l34_039",
+        "english": "widower",
+        "arabic": "أَرْمَعُ",
+        "transliteration": "armau"
+      },
+      {
+        "id": "b3_l34_040",
+        "english": "widow",
+        "arabic": "أَرْمَلَةٌ",
+        "transliteration": "armalatun"
+      },
+      {
+        "id": "b3_l34_041",
+        "english": "combined",
+        "arabic": "مَوْجياً",
+        "transliteration": "mawjiyan"
+      },
+      {
+        "id": "b3_l34_042",
+        "english": "stomach",
+        "arabic": "مَعْدِي",
+        "transliteration": "madiy"
+      },
+      {
+        "id": "b3_l34_043",
+        "english": "stomach distress",
+        "arabic": "مَعْدِيكَرِبُ",
+        "transliteration": "madiikaribu"
+      },
+      {
+        "id": "b3_l34_044",
+        "english": "near to death",
+        "arabic": "حَضَرَمَوْتُ",
+        "transliteration": "hadaramawtu"
+      },
+      {
+        "id": "b3_l34_045",
+        "english": "to add (gr) to add a noun to another to signify the meaning of possession",
+        "arabic": "أَضَافَ",
+        "transliteration": "adaafa"
+      },
+      {
+        "id": "b3_l34_046",
+        "english": "(gr) a noun ending in an original ya such as an-naady",
+        "arabic": "مَنْقُوصُ",
+        "transliteration": "manquusun"
+      },
+      {
+        "id": "b3_l34_047",
+        "english": "girl",
+        "arabic": "جَارِيَةٌ",
+        "transliteration": "jaariyatun"
+      },
+      {
+        "id": "b3_l34_048",
+        "english": "rabbit",
+        "arabic": "أَرْنَبٌ",
+        "transliteration": "arnabun"
+      }
+    ]
+  }
+]

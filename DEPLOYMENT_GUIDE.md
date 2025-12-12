@@ -221,3 +221,4 @@ cd "d:\MyApps\Arabic Vocab" && firebase deploy --only hosting
 For a small app like this, you should stay well within the free tier!
 
 
+

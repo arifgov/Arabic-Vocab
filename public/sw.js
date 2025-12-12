@@ -17,7 +17,8 @@ const STATIC_FILES = [
 // Data files to cache
 const DATA_FILES = [
   '/data/book1.json',
-  '/data/book2.json'
+  '/data/book2.json',
+  '/data/book3.json'
 ];
 
 // Install event - cache static files

@@ -2,7 +2,7 @@
 
 class VocabTrainer {
     constructor() {
-        this.books = { 1: [], 2: [] };
+        this.books = { 1: [], 2: [], 3: [] };
         this.currentBook = 1;
         this.currentLesson = null;
         this.currentMode = 'english-arabic';
@@ -616,26 +616,29 @@ class VocabTrainer {
     async loadData() {
         try {
             console.log('📥 Loading vocabulary data...');
-            const [book1Res, book2Res] = await Promise.all([
+            const [book1Res, book2Res, book3Res] = await Promise.all([
                 fetch('data/book1.json'),
-                fetch('data/book2.json')
+                fetch('data/book2.json'),
+                fetch('data/book3.json')
             ]);
             
-            if (!book1Res.ok || !book2Res.ok) {
-                throw new Error(`Failed to fetch data: Book1=${book1Res.status}, Book2=${book2Res.status}`);
+            if (!book1Res.ok || !book2Res.ok || !book3Res.ok) {
+                throw new Error(`Failed to fetch data: Book1=${book1Res.status}, Book2=${book2Res.status}, Book3=${book3Res.status}`);
             }
             
             this.books[1] = await book1Res.json();
             this.books[2] = await book2Res.json();
+            this.books[3] = await book3Res.json();
             
             console.log(`✅ Loaded Book 1: ${this.books[1].length} lessons`);
             console.log(`✅ Loaded Book 2: ${this.books[2].length} lessons`);
+            console.log(`✅ Loaded Book 3: ${this.books[3].length} lessons`);
             
             // Initialize progress for all words
             this.initializeProgress();
         } catch (error) {
             console.error('❌ Error loading data:', error);
-            alert('Failed to load vocabulary data. Please check that book1.json and book2.json exist in the data folder.\n\nError: ' + error.message);
+            alert('Failed to load vocabulary data. Please check that book1.json, book2.json, and book3.json exist in the data folder.\n\nError: ' + error.message);
         }
     }
     

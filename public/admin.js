@@ -6,7 +6,7 @@ const ADMIN_EMAIL = 'arif@govani.org';
 class AdminPortal {
     constructor() {
         this.db = null;
-        this.books = { 1: [], 2: [] };
+        this.books = { 1: [], 2: [], 3: [] };
         this.currentUserDetail = null;
     }
 
@@ -23,12 +23,14 @@ class AdminPortal {
 
     async loadBookData() {
         try {
-            const [book1Res, book2Res] = await Promise.all([
+            const [book1Res, book2Res, book3Res] = await Promise.all([
                 fetch('data/book1.json'),
-                fetch('data/book2.json')
+                fetch('data/book2.json'),
+                fetch('data/book3.json')
             ]);
             if (book1Res.ok) this.books[1] = await book1Res.json();
             if (book2Res.ok) this.books[2] = await book2Res.json();
+            if (book3Res.ok) this.books[3] = await book3Res.json();
         } catch (error) {
             console.error('Error loading book data:', error);
         }
@@ -454,5 +456,6 @@ document.addEventListener('click', async (e) => {
         }
     }
 });
+
 
 
