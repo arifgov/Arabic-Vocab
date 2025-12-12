@@ -444,10 +444,6 @@ class VocabTrainer {
                 console.log(`   - Server progress score: ${serverScore.toFixed(2)}`);
                 console.log(`   - Local progress score: ${localScore.toFixed(2)}`);
                 
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:415',message:'comparing progress scores in syncProgressFromServer',data:{serverScore,localScore,serverHasHigherScore:serverScore>localScore,isNewDevice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score3'})}).catch(()=>{});
-                // #endregion
-                
                 if (isNewDevice) {
                     // NEW DEVICE: Use Firebase data directly (no merge with empty local)
                     console.log('📥 New device - using Firebase data directly (no merge)');
@@ -473,10 +469,6 @@ class VocabTrainer {
                 const finalWordCount = Object.keys(this.progress.wordProgress || {}).length;
                 const finalScore = this.calculateProgressScore(this.progress);
                 console.log('✅ Progress saved to localStorage:', finalWordCount, 'words, score:', finalScore.toFixed(2));
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:474',message:'final score after merge/load',data:{finalScore,serverScore,localScore,willSync:!isNewDevice && finalScore > serverScore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score3'})}).catch(()=>{});
-                // #endregion
                 
                 // CRITICAL SAFEGUARD: Verify merged score is >= max(local, server)
                 // This ensures merge never loses progress
@@ -1271,12 +1263,37 @@ class VocabTrainer {
                     // Mixed mode hasn't been started, don't show the button
                     mixedBtn.style.display = 'none';
                 } else {
-                    // Mixed mode has been started, check if there are actual mistakes
+                    // Mixed mode has been started, check if there are actual mistakes IN MIXED MODE
+                    // The button should only show if clicking it would show words to review.
+                    // The buildQuestionPool for reviewMistakesOnly in Mixed mode uses:
+                    //   hasBeenAttempted = incorrect_count > 0 || correct_count > 0
+                    //   return hasBeenAttempted && !wp.mixed_correct
+                    //
+                    // The issue: This will include words that:
+                    // - Were attempted in another mode (correct_count > 0 from another mode)
+                    // - Haven't been attempted in Mixed yet (mixed_correct === false)
+                    // These shouldn't trigger the Review Mistakes button for Mixed mode.
+                    //
+                    // Fix: Only show button if there are words that would actually appear in Review Mistakes
+                    // AND we can verify they were attempted in Mixed mode (or got wrong in Mixed).
+                    // Since we can't perfectly track mode-specific mistakes, use this heuristic:
+                    // - Show button only if there are words with incorrect_count > 0 (got wrong somewhere)
+                    //   AND mixed_correct === false (not correct in Mixed)
+                    // This is conservative and ensures we only show if there are actual mistakes.
+                    //
+                    // However, this still has the issue that incorrect_count could be from another mode.
+                    // The real solution would be to track mode-specific incorrect_count, but that's a bigger change.
+                    // For now, this is the best we can do without that tracking.
                     const hasMistakes = lessonData.items.some(item => {
                         const wp = this.getWordProgress(item.id);
-                        // Only show if word has been attempted and got wrong in Mixed mode
-                        // Since incorrect_count is global, we check: incorrect_count > 0 AND not correct in Mixed
-                        return wp.incorrect_count > 0 && !wp.mixed_correct;
+                        // Match the buildQuestionPool logic: hasBeenAttempted && !wp.mixed_correct
+                        // But be more conservative: only show if there are actual mistakes (incorrect_count > 0)
+                        const hasBeenAttempted = wp.incorrect_count > 0 || wp.correct_count > 0;
+                        const wouldAppearInPool = hasBeenAttempted && !wp.mixed_correct;
+                        
+                        // Only count as a mistake if there's an actual mistake (incorrect_count > 0)
+                        // This prevents words that were only attempted in another mode from triggering the button
+                        return wouldAppearInPool && wp.incorrect_count > 0;
                     });
                     mixedBtn.style.display = hasMistakes ? 'block' : 'none';
                 }
@@ -1322,9 +1339,6 @@ class VocabTrainer {
                 // Resume if there are remaining questions (even if mistakes were made, we can continue)
                 if (session.questionPoolIds && session.questionPoolIds.length > 0) {
                     console.log('📂 Resuming previous session...');
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1258',message:'resuming session - before restore',data:{sessionAttempted:session.attempted,sessionCorrect:session.correct,sessionIncorrect:session.incorrect,questionPoolIdsLength:session.questionPoolIds?.length,totalQuestions:session.totalQuestions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp3'})}).catch(()=>{});
-                    // #endregion
                     this.sessionStats = {
                         attempted: session.attempted || 0,
                         correct: session.correct || 0,
@@ -1348,9 +1362,6 @@ class VocabTrainer {
                     }
                     
                     this.totalQuestions = session.totalQuestions || this.questionPool.length;
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1282',message:'resuming session - after restore',data:{sessionStatsAttempted:this.sessionStats.attempted,sessionStatsCorrect:this.sessionStats.correct,questionPoolLength:this.questionPool.length,totalQuestions:this.totalQuestions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp3'})}).catch(()=>{});
-                    // #endregion
                     console.log(`✅ Resumed: ${this.sessionStats.attempted} attempted, ${this.questionPool.length} questions remaining`);
                     // Keep the session key - we'll update it as we progress
                 } else {
@@ -1776,9 +1787,6 @@ class VocabTrainer {
             }
         });
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:1708',message:'calculateModeProgress result',data:{mode,completed,totalItems:items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hyp4'})}).catch(()=>{});
-        // #endregion
         return completed;
     }
     
@@ -2309,9 +2317,6 @@ class VocabTrainer {
     }
     
     updateQuestionStats() {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:2242',message:'updateQuestionStats entry',data:{currentMode:this.currentMode,currentBook:this.currentBook,currentLesson:this.currentLesson,reviewMistakesOnly:this.reviewMistakesOnly,isFinalTest:this.isFinalTest,sessionAttempted:this.sessionStats.attempted},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'hyp1,hyp2'})}).catch(()=>{});
-        // #endregion
         // CRITICAL FIX: Calculate question number based on overall progress, not just session progress
         const lessonData = this.books[this.currentBook]?.find(l => l.lesson === this.currentLesson);
         let alreadyCompleted = 0;
@@ -2344,11 +2349,6 @@ class VocabTrainer {
         
         const totalQuestions = this.totalQuestions || 0;
         const remaining = this.questionPool.length;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.js:2275',message:'final questionNumber calculation',data:{reviewMistakesOnly:this.reviewMistakesOnly,isFinalTest:this.isFinalTest,alreadyCompleted,sessionAttempted:this.sessionStats.attempted,questionNumber,totalQuestions,remaining},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'hyp1,hyp2'})}).catch(()=>{});
-        // #endregion
-        console.log('🔍 DEBUG updateQuestionStats:', {reviewMistakesOnly: this.reviewMistakesOnly, alreadyCompleted, sessionAttempted: this.sessionStats.attempted, questionNumber, totalQuestions});
-        
         // Show progress: "Question X / Total" or "Question X" if total not set
         if (totalQuestions > 0) {
             document.getElementById('question-number').textContent = `Question ${questionNumber} / ${totalQuestions}`;

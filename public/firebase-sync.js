@@ -263,10 +263,6 @@ class FirebaseSync {
                 console.log(`   - Server progress score: ${serverScore.toFixed(2)}`);
                 console.log(`   - Local progress score: ${localScore.toFixed(2)}`);
                 
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d5a761d5-2d1f-4fde-b621-1a936dc331bc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'firebase-sync.js:260',message:'comparing progress scores',data:{serverScore,localScore,serverHasHigherScore:serverScore>localScore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'score1'})}).catch(()=>{});
-                // #endregion
-                
                 if (serverScore > localScore) {
                     console.warn('⚠️ Server data has HIGHER SCORE than local data - syncing server data to local store');
                     console.warn(`   - Server score: ${serverScore.toFixed(2)}`);
