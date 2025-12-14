@@ -373,15 +373,15 @@ class FirebaseSync {
         
         // Always load fresh data from localStorage for manual sync
         // This ensures we sync the absolute latest state
+        let localProgressData = null;
         if (this.syncEnabled && this.userId) {
             const currentProgress = localStorage.getItem('madinah_vocab_progress');
             if (currentProgress) {
                 try {
-                    const progressData = JSON.parse(currentProgress);
-                    this.pendingProgress = progressData;
+                    localProgressData = JSON.parse(currentProgress);
                     console.log('📦 Loaded fresh progress from localStorage for sync');
-                    console.log('   - Word progress entries:', Object.keys(progressData.wordProgress || {}).length);
-                    console.log('   - localModifiedAt:', progressData.localModifiedAt);
+                    console.log('   - Word progress entries:', Object.keys(localProgressData.wordProgress || {}).length);
+                    console.log('   - localModifiedAt:', localProgressData.localModifiedAt);
                 } catch (e) {
                     console.error('Error parsing progress for sync:', e);
                 }
@@ -390,6 +390,42 @@ class FirebaseSync {
             }
         } else {
             console.warn('⚠️ Sync not enabled or no userId:', { syncEnabled: this.syncEnabled, userId: this.userId });
+        }
+        
+        // CRITICAL: Check server score BEFORE syncing to prevent overwriting higher-scored data
+        if (localProgressData && this.syncEnabled && this.userId) {
+            try {
+                const serverProgress = await this.loadProgress();
+                if (serverProgress) {
+                    const serverScore = this.calculateProgressScore(serverProgress);
+                    const localScore = this.calculateProgressScore(localProgressData);
+                    
+                    console.log(`   - Server progress score: ${serverScore.toFixed(2)}`);
+                    console.log(`   - Local progress score: ${localScore.toFixed(2)}`);
+                    
+                    if (serverScore > localScore) {
+                        console.warn('⚠️ Server data has HIGHER SCORE than local data - syncing server data to local store');
+                        console.warn(`   - Server score: ${serverScore.toFixed(2)}`);
+                        console.warn(`   - Local score: ${localScore.toFixed(2)}`);
+                        console.warn('   - Loading server data to local storage...');
+                        
+                        // Load server data to local storage
+                        serverProgress.localModifiedAt = Date.now();
+                        localStorage.setItem('madinah_vocab_progress', JSON.stringify(serverProgress));
+                        console.log('✅ Server data synced to local storage');
+                        
+                        // Trigger a custom event to notify the app that progress was updated from server
+                        window.dispatchEvent(new CustomEvent('progressUpdatedFromServer', { 
+                            detail: { progress: serverProgress } 
+                        }));
+                        
+                        return false; // Don't upload local data, but we've synced server to local
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ Error checking server score in forceSync:', error);
+                // Continue with sync if check fails
+            }
         }
         
         // If a sync is already in progress, wait for it to complete then sync again
@@ -411,6 +447,11 @@ class FirebaseSync {
         if (this.syncTimer) {
             clearTimeout(this.syncTimer);
             this.syncTimer = null;
+        }
+        
+        // Set pending progress if we loaded it
+        if (localProgressData) {
+            this.pendingProgress = localProgressData;
         }
         
         // If there's pending progress, sync it immediately

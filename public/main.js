@@ -2263,6 +2263,27 @@ class VocabTrainer {
             mastered: wpAfterMastery.mastered
         });
         
+        // CRITICAL FIX: In Review Mistakes mode, if a word becomes correct, remove it from the pool
+        // and update totalQuestions to reflect the actual number of questions
+        if (this.reviewMistakesOnly && isCorrect) {
+            // Filter out words that are now correct from the remaining pool
+            const initialPoolSize = this.totalQuestions || this.questionPool.length + this.sessionStats.attempted;
+            this.questionPool = this.questionPool.filter(item => {
+                const wp = this.getWordProgress(item.id);
+                if (this.currentMode === 'arabic-english') {
+                    return !wp.arabic_english_correct;
+                } else if (this.currentMode === 'mixed') {
+                    return !wp.mixed_correct;
+                } else {
+                    return !wp.english_arabic_correct;
+                }
+            });
+            // Update totalQuestions to be: questions already answered + remaining pool size
+            // This ensures the count is accurate
+            this.totalQuestions = this.sessionStats.attempted + this.questionPool.length;
+            console.log(`🔄 Review Mistakes: After correct answer, ${this.questionPool.length} words remaining, totalQuestions updated to ${this.totalQuestions}`);
+        }
+        
         // Save session state after each answer (for resume functionality)
         this.saveSessionState();
         
@@ -2329,6 +2350,12 @@ class VocabTrainer {
             // For Review Mistakes and Final Test: question number = current position in session
             // This is because these modes don't track overall progress the same way
             questionNumber = this.sessionStats.attempted + 1;
+            // CRITICAL FIX: For Review Mistakes, totalQuestions is updated dynamically as words become correct
+            // So we need to use the current totalQuestions value
+            if (this.reviewMistakesOnly && this.totalQuestions) {
+                // totalQuestions is already updated in checkAnswer() to reflect remaining + answered
+                // So we can use it directly
+            }
         } else {
             // For regular practice: calculate based on overall progress
             if (lessonData) {
@@ -2353,6 +2380,7 @@ class VocabTrainer {
         const totalQuestions = this.totalQuestions || 0;
         const remaining = this.questionPool.length;
         // Show progress: "Question X / Total" or "Question X" if total not set
+        // For Review Mistakes, totalQuestions is dynamically updated, so it should be accurate
         if (totalQuestions > 0) {
             document.getElementById('question-number').textContent = `Question ${questionNumber} / ${totalQuestions}`;
         } else {
